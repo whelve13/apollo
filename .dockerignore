@@ -1,0 +1,27 @@
+# Version control
+.git
+.gitignore
+.github
+
+# Maven wrapper and local build cache
+.mvn
+mvnw
+mvnw.cmd
+target
+
+# Node / frontend artifacts if present
+node_modules
+
+# Environment & credentials
+.env
+*.env
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# IDE and editor files
+.idea
+.vscode
+*.iml
+*.log
