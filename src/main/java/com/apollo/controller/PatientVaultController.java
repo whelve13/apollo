@@ -1,6 +1,7 @@
 package com.apollo.controller;
 
 import com.apollo.domain.enums.PrescriptionStatus;
+import com.apollo.dto.lab.LabTestResultResponse;
 import com.apollo.dto.prescription.PrescriptionResponse;
 import com.apollo.dto.vault.AccessGrantResponse;
 import com.apollo.dto.vault.CreateHealthConditionRequest;
@@ -8,6 +9,7 @@ import com.apollo.dto.vault.HealthConditionResponse;
 import com.apollo.dto.vault.PatientVaultTimelineResponse;
 import com.apollo.exception.ErrorResponse;
 import com.apollo.security.CustomUserDetails;
+import com.apollo.service.LabTestResultService;
 import com.apollo.service.PatientVaultService;
 import com.apollo.service.PrescriptionService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -41,11 +43,12 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('PATIENT')")
 @SecurityRequirement(name = "bearerAuth")
-@Tag(name = "Patient Vault", description = "Endpoints for managing baseline health data, temporary consultation access codes, and chronological timeline")
+@Tag(name = "Patient Vault", description = "Endpoints for managing baseline health data, temporary consultation access codes, chronological timeline, and lab results")
 public class PatientVaultController {
 
     private final PatientVaultService patientVaultService;
     private final PrescriptionService prescriptionService;
+    private final LabTestResultService labTestResultService;
 
     @Operation(summary = "Add a baseline health condition or allergy", description = "Records a foundational patient-declared medical condition in the vault.")
     @ApiResponses({
@@ -146,6 +149,24 @@ public class PatientVaultController {
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @RequestParam(required = false) PrescriptionStatus status) {
         List<PrescriptionResponse> response = prescriptionService.getPatientPrescriptions(userDetails.getProfileId(), status);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary = "Get patient diagnostic lab test results",
+            description = "Retrieves time-series lab test results for the patient sorted chronologically ascending (recordedAt ASC) for trend charting. Optionally filtered by testName.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Lab test results retrieved successfully",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = LabTestResultResponse.class)))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires ROLE_PATIENT",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @GetMapping("/test-results")
+    public ResponseEntity<List<LabTestResultResponse>> getTestResults(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestParam(required = false) String testName) {
+        List<LabTestResultResponse> response = labTestResultService.getPatientTestResults(userDetails.getProfileId(), testName);
         return ResponseEntity.ok(response);
     }
 }

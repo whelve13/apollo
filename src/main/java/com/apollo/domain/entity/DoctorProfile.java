@@ -1,9 +1,12 @@
 package com.apollo.domain.entity;
 
+import com.apollo.domain.enums.DoctorRole;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -56,6 +59,11 @@ public class DoctorProfile {
 
     @Column(name = "specialty", nullable = false, length = 100)
     private String specialty;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "doctor_role", nullable = false, length = 32)
+    @Builder.Default
+    private DoctorRole doctorRole = DoctorRole.GENERAL_PRACTITIONER;
 
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)

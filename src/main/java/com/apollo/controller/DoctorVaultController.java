@@ -6,9 +6,12 @@ import com.apollo.dto.doctor.UnlockVaultRequest;
 import com.apollo.dto.doctor.UnlockedVaultResponse;
 import com.apollo.exception.ErrorResponse;
 import com.apollo.security.CustomUserDetails;
+import com.apollo.dto.lab.CreateLabTestResultRequest;
+import com.apollo.dto.lab.LabTestResultResponse;
 import com.apollo.dto.prescription.CreatePrescriptionRequest;
 import com.apollo.dto.prescription.PrescriptionResponse;
 import com.apollo.service.DoctorVaultService;
+import com.apollo.service.LabTestResultService;
 import com.apollo.service.PrescriptionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -33,11 +36,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('DOCTOR')")
 @SecurityRequirement(name = "bearerAuth")
-@Tag(name = "Doctor Operations", description = "Clinician endpoints for patient vault PIN handshake and append-only clinical encounter logging")
+@Tag(name = "Doctor Operations", description = "Clinician endpoints for patient vault PIN handshake, append-only clinical encounter logging, and lab test results")
 public class DoctorVaultController {
 
     private final DoctorVaultService doctorVaultService;
     private final PrescriptionService prescriptionService;
+    private final LabTestResultService labTestResultService;
 
     @Operation(summary = "Unlock patient vault via 6-digit access PIN",
             description = "Validates and consumes a single-use 6-digit consultation access PIN. Unlocks patient demographics, baseline health records, and past consultation history for clinical review.")
@@ -100,6 +104,28 @@ public class DoctorVaultController {
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @Valid @RequestBody CreatePrescriptionRequest request) {
         PrescriptionResponse response = prescriptionService.issuePrescription(userDetails.getProfileId(), request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @Operation(summary = "Record a numerical lab test result or biomarker measurement",
+            description = "Appends a structured numerical diagnostic test result for the patient. Permitted for General Practitioners, Specialists, and Lab Technicians with an active 24-hour vault session.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Lab test result recorded successfully",
+                    content = @Content(schema = @Schema(implementation = LabTestResultResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid request payload",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires active 24h session and authorized doctor role",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Patient or doctor not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @PostMapping("/test-results")
+    public ResponseEntity<LabTestResultResponse> recordTestResult(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody CreateLabTestResultRequest request) {
+        LabTestResultResponse response = labTestResultService.recordTestResult(userDetails.getProfileId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }

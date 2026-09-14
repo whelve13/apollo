@@ -11,9 +11,11 @@ import com.apollo.dto.doctor.UnlockVaultRequest;
 import com.apollo.dto.prescription.CreatePrescriptionRequest;
 import com.apollo.dto.prescription.UpdatePrescriptionStatusRequest;
 import com.apollo.repository.AccessGrantRepository;
+import com.apollo.repository.ActiveVaultSessionRepository;
 import com.apollo.repository.ClinicalEncounterRepository;
 import com.apollo.repository.DoctorProfileRepository;
 import com.apollo.repository.HealthConditionRepository;
+import com.apollo.repository.LabTestResultRepository;
 import com.apollo.repository.PatientProfileRepository;
 import com.apollo.repository.PrescriptionRepository;
 import com.apollo.repository.UserRepository;
@@ -79,9 +81,17 @@ class PrescriptionIntegrationTests {
     @Autowired
     private PrescriptionRepository prescriptionRepository;
 
+    @Autowired
+    private ActiveVaultSessionRepository activeVaultSessionRepository;
+
+    @Autowired
+    private LabTestResultRepository labTestResultRepository;
+
     @BeforeEach
     void setUp() {
+        labTestResultRepository.deleteAll();
         prescriptionRepository.deleteAll();
+        activeVaultSessionRepository.deleteAll();
         accessGrantRepository.deleteAll();
         clinicalEncounterRepository.deleteAll();
         healthConditionRepository.deleteAll();
@@ -146,6 +156,20 @@ class PrescriptionIntegrationTests {
         return doctorProfileRepository.findById(profileId).orElseThrow();
     }
 
+    private void unlockVaultSession(String patientToken, String doctorToken) throws Exception {
+        MvcResult grantResult = mockMvc.perform(post("/api/v1/patient/vault/access-grants")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String accessCode = objectMapper.readTree(grantResult.getResponse().getContentAsString()).get("accessCode").asText();
+
+        mockMvc.perform(post("/api/v1/doctor/vault/unlock")
+                        .header("Authorization", "Bearer " + doctorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(UnlockVaultRequest.builder().accessCode(accessCode).build())))
+                .andExpect(status().isOk());
+    }
+
     @Test
     @DisplayName("Doctor should successfully issue a standalone prescription (without encounter)")
     void testDoctorIssuesPrescriptionStandalone() throws Exception {
@@ -154,6 +178,8 @@ class PrescriptionIntegrationTests {
 
         PatientProfile patient = getPatientProfile(patientToken);
         DoctorProfile doctor = getDoctorProfile(doctorToken);
+
+        unlockVaultSession(patientToken, doctorToken);
 
         CreatePrescriptionRequest request = CreatePrescriptionRequest.builder()
                 .patientId(patient.getId())
@@ -284,6 +310,9 @@ class PrescriptionIntegrationTests {
 
         UUID patientBEncounterId = UUID.fromString(objectMapper.readTree(encResult.getResponse().getContentAsString()).get("id").asText());
 
+        // Doctor unlocks Patient A vault session as well
+        unlockVaultSession(patientToken1, doctorToken);
+
         // Doctor tries to issue prescription for Patient A referencing Patient B's encounter
         CreatePrescriptionRequest badPrescRequest = CreatePrescriptionRequest.builder()
                 .patientId(patientA.getId())
@@ -309,6 +338,8 @@ class PrescriptionIntegrationTests {
         String doctorToken = registerAndGetToken("doctor.presc.query@apollo.local", "DOCTOR");
 
         PatientProfile patient = getPatientProfile(patientToken);
+
+        unlockVaultSession(patientToken, doctorToken);
 
         // Doctor issues 2 prescriptions
         CreatePrescriptionRequest presc1 = CreatePrescriptionRequest.builder()
@@ -388,6 +419,8 @@ class PrescriptionIntegrationTests {
 
         PatientProfile patient = getPatientProfile(patientToken);
 
+        unlockVaultSession(patientToken, doctorToken);
+
         CreatePrescriptionRequest request = CreatePrescriptionRequest.builder()
                 .patientId(patient.getId())
                 .medicationName("Lisinopril 10mg")
@@ -426,6 +459,8 @@ class PrescriptionIntegrationTests {
 
         PatientProfile patient = getPatientProfile(patientToken);
 
+        unlockVaultSession(patientToken, doctorToken);
+
         CreatePrescriptionRequest request = CreatePrescriptionRequest.builder()
                 .patientId(patient.getId())
                 .medicationName("Metformin 500mg")
@@ -463,6 +498,8 @@ class PrescriptionIntegrationTests {
 
         PatientProfile patient = getPatientProfile(patientToken);
 
+        unlockVaultSession(patientToken, doctorToken);
+
         CreatePrescriptionRequest request = CreatePrescriptionRequest.builder()
                 .patientId(patient.getId())
                 .medicationName("Omeprazole 20mg")
@@ -499,6 +536,8 @@ class PrescriptionIntegrationTests {
         String doctorToken = registerAndGetToken("doctor.presc.term@apollo.local", "DOCTOR");
 
         PatientProfile patient = getPatientProfile(patientToken);
+
+        unlockVaultSession(patientToken, doctorToken);
 
         CreatePrescriptionRequest request = CreatePrescriptionRequest.builder()
                 .patientId(patient.getId())
@@ -542,6 +581,8 @@ class PrescriptionIntegrationTests {
 
         PatientProfile patientA = getPatientProfile(patientTokenA);
 
+        unlockVaultSession(patientTokenA, doctorToken);
+
         CreatePrescriptionRequest request = CreatePrescriptionRequest.builder()
                 .patientId(patientA.getId())
                 .medicationName("Atorvastatin 20mg")
@@ -576,6 +617,8 @@ class PrescriptionIntegrationTests {
         String doctorTokenB = registerAndGetToken("doctor.presc.dociso.b@apollo.local", "DOCTOR");
 
         PatientProfile patient = getPatientProfile(patientToken);
+
+        unlockVaultSession(patientToken, doctorTokenA);
 
         CreatePrescriptionRequest request = CreatePrescriptionRequest.builder()
                 .patientId(patient.getId())

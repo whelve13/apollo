@@ -1,5 +1,6 @@
 package com.apollo.dto.auth;
 
+import com.apollo.domain.enums.DoctorRole;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -47,4 +48,7 @@ public class RegisterDoctorRequest {
     @Size(max = 100, message = "Specialty must not exceed 100 characters")
     @Schema(example = "Diagnostics & Nephrology")
     private String specialty;
+
+    @Schema(description = "Specific clinician or healthcare worker role (defaults to GENERAL_PRACTITIONER)", example = "GENERAL_PRACTITIONER")
+    private DoctorRole doctorRole;
 }

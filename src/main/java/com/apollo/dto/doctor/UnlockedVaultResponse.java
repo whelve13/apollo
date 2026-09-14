@@ -34,4 +34,16 @@ public class UnlockedVaultResponse {
 
     @Schema(description = "Chronological past consultation encounter history")
     private List<ClinicalEncounterSummaryDto> encounterHistory;
+
+    @Schema(description = "Scoped 24-hour active vault session UUID", example = "f4eebc99-9c0b-4ef8-bb6d-6bb9bd380a77")
+    private java.util.UUID activeSessionId;
+
+    @Schema(description = "Timestamp when the 24-hour consultation session expires")
+    private java.time.Instant sessionExpiresAt;
+
+    @Schema(description = "Active and past prescriptions (accessible to clinicians and pharmacists)")
+    private List<com.apollo.dto.prescription.PrescriptionResponse> prescriptions;
+
+    @Schema(description = "Biometric and diagnostic lab test results")
+    private List<com.apollo.dto.lab.LabTestResultResponse> testResults;
 }

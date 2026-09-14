@@ -4,12 +4,14 @@ import com.apollo.domain.entity.ClinicalEncounter;
 import com.apollo.domain.entity.DoctorProfile;
 import com.apollo.domain.entity.PatientProfile;
 import com.apollo.domain.entity.Prescription;
+import com.apollo.domain.enums.DoctorRole;
 import com.apollo.domain.enums.PrescriptionStatus;
 import com.apollo.domain.enums.Role;
 import com.apollo.dto.prescription.CreatePrescriptionRequest;
 import com.apollo.dto.prescription.PrescriptionResponse;
 import com.apollo.dto.prescription.UpdatePrescriptionStatusRequest;
 import com.apollo.exception.ResourceNotFoundException;
+import com.apollo.repository.ActiveVaultSessionRepository;
 import com.apollo.repository.ClinicalEncounterRepository;
 import com.apollo.repository.DoctorProfileRepository;
 import com.apollo.repository.PatientProfileRepository;
@@ -34,6 +36,7 @@ public class PrescriptionServiceImpl implements PrescriptionService {
     private final DoctorProfileRepository doctorProfileRepository;
     private final PatientProfileRepository patientProfileRepository;
     private final ClinicalEncounterRepository clinicalEncounterRepository;
+    private final ActiveVaultSessionRepository activeVaultSessionRepository;
 
     @Override
     @Transactional
@@ -41,8 +44,20 @@ public class PrescriptionServiceImpl implements PrescriptionService {
         DoctorProfile doctor = doctorProfileRepository.findById(doctorProfileId)
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor profile not found: " + doctorProfileId));
 
+        // Role restriction: Only GPs and Specialists can issue prescriptions
+        if (doctor.getDoctorRole() != DoctorRole.GENERAL_PRACTITIONER && doctor.getDoctorRole() != DoctorRole.SPECIALIST) {
+            throw new AccessDeniedException("Only general practitioners and specialists are authorized to issue prescriptions.");
+        }
+
         PatientProfile patient = patientProfileRepository.findById(request.getPatientId())
                 .orElseThrow(() -> new ResourceNotFoundException("Patient profile not found: " + request.getPatientId()));
+
+        // Active 24-hour consultation session validation
+        boolean hasActiveSession = activeVaultSessionRepository
+                .existsByDoctorIdAndPatientIdAndExpiresAtAfter(doctor.getId(), patient.getId(), Instant.now());
+        if (!hasActiveSession) {
+            throw new AccessDeniedException("Doctor does not have an active 24-hour consultation session for this patient. Please unlock the vault with a valid patient access PIN.");
+        }
 
         ClinicalEncounter encounter = null;
         if (request.getEncounterId() != null) {
@@ -105,11 +120,22 @@ public class PrescriptionServiceImpl implements PrescriptionService {
                 throw new IllegalArgumentException("Patients can only update prescription status to FULFILLED.");
             }
         } else if (role == Role.ROLE_DOCTOR) {
-            if (!prescription.getDoctor().getId().equals(profileId)) {
-                throw new AccessDeniedException("You do not have permission to update this prescription.");
-            }
-            if (request.getStatus() == PrescriptionStatus.FULFILLED) {
-                throw new IllegalArgumentException("Doctors cannot mark prescriptions as FULFILLED. Fulfillment is recorded by the patient upon pharmacy dispensing.");
+            DoctorProfile doctor = doctorProfileRepository.findById(profileId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Doctor profile not found: " + profileId));
+
+            if (doctor.getDoctorRole() == DoctorRole.PHARMACIST) {
+                // Pharmacists can mark active prescriptions as FULFILLED upon dispensing
+                if (request.getStatus() != PrescriptionStatus.FULFILLED) {
+                    throw new IllegalArgumentException("Pharmacists can only mark prescriptions as FULFILLED.");
+                }
+            } else {
+                // Prescribing doctor can mark as CANCELLED
+                if (!prescription.getDoctor().getId().equals(profileId)) {
+                    throw new AccessDeniedException("You do not have permission to update this prescription.");
+                }
+                if (request.getStatus() == PrescriptionStatus.FULFILLED) {
+                    throw new IllegalArgumentException("Doctors cannot mark prescriptions as FULFILLED. Fulfillment is recorded by the patient upon pharmacy dispensing.");
+                }
             }
         } else {
             throw new AccessDeniedException("Unauthorized role for updating prescription status.");

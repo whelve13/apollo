@@ -99,12 +99,17 @@ public class AuthServiceImpl implements AuthService {
                 .build();
         user = userRepository.save(user);
 
+        com.apollo.domain.enums.DoctorRole doctorRole = request.getDoctorRole() != null
+                ? request.getDoctorRole()
+                : com.apollo.domain.enums.DoctorRole.GENERAL_PRACTITIONER;
+
         DoctorProfile doctor = DoctorProfile.builder()
                 .user(user)
                 .firstName(request.getFirstName().trim())
                 .lastName(request.getLastName().trim())
                 .licenseNumber(normalizedLicense)
                 .specialty(request.getSpecialty().trim())
+                .doctorRole(doctorRole)
                 .build();
         doctor = doctorProfileRepository.save(doctor);
 

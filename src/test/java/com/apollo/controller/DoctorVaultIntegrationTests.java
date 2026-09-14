@@ -13,10 +13,13 @@ import com.apollo.dto.doctor.DoctorConditionInput;
 import com.apollo.dto.doctor.UnlockVaultRequest;
 import com.apollo.dto.vault.CreateHealthConditionRequest;
 import com.apollo.repository.AccessGrantRepository;
+import com.apollo.repository.ActiveVaultSessionRepository;
 import com.apollo.repository.ClinicalEncounterRepository;
 import com.apollo.repository.DoctorProfileRepository;
 import com.apollo.repository.HealthConditionRepository;
+import com.apollo.repository.LabTestResultRepository;
 import com.apollo.repository.PatientProfileRepository;
+import com.apollo.repository.PrescriptionRepository;
 import com.apollo.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -73,8 +76,20 @@ class DoctorVaultIntegrationTests {
     @Autowired
     private AccessGrantRepository accessGrantRepository;
 
+    @Autowired
+    private PrescriptionRepository prescriptionRepository;
+
+    @Autowired
+    private ActiveVaultSessionRepository activeVaultSessionRepository;
+
+    @Autowired
+    private LabTestResultRepository labTestResultRepository;
+
     @BeforeEach
     void setUp() {
+        labTestResultRepository.deleteAll();
+        prescriptionRepository.deleteAll();
+        activeVaultSessionRepository.deleteAll();
         accessGrantRepository.deleteAll();
         clinicalEncounterRepository.deleteAll();
         healthConditionRepository.deleteAll();
@@ -251,6 +266,19 @@ class DoctorVaultIntegrationTests {
 
         User patientUser = userRepository.findByEmail("patient.enc@apollo.local").orElseThrow();
         PatientProfile patient = patientProfileRepository.findByUserId(patientUser.getId()).orElseThrow();
+
+        // Patient generates access PIN and doctor unlocks vault to establish 24h session
+        MvcResult grantResult = mockMvc.perform(post("/api/v1/patient/vault/access-grants")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String accessCode = objectMapper.readTree(grantResult.getResponse().getContentAsString()).get("accessCode").asText();
+
+        mockMvc.perform(post("/api/v1/doctor/vault/unlock")
+                        .header("Authorization", "Bearer " + doctorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(UnlockVaultRequest.builder().accessCode(accessCode).build())))
+                .andExpect(status().isOk());
 
         CreateEncounterRequest encounterRequest = CreateEncounterRequest.builder()
                 .patientId(patient.getId())

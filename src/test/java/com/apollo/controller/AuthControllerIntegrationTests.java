@@ -4,8 +4,14 @@ import com.apollo.domain.enums.Role;
 import com.apollo.dto.auth.LoginRequest;
 import com.apollo.dto.auth.RegisterDoctorRequest;
 import com.apollo.dto.auth.RegisterPatientRequest;
+import com.apollo.repository.AccessGrantRepository;
+import com.apollo.repository.ActiveVaultSessionRepository;
+import com.apollo.repository.ClinicalEncounterRepository;
 import com.apollo.repository.DoctorProfileRepository;
+import com.apollo.repository.HealthConditionRepository;
+import com.apollo.repository.LabTestResultRepository;
 import com.apollo.repository.PatientProfileRepository;
+import com.apollo.repository.PrescriptionRepository;
 import com.apollo.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,8 +56,32 @@ class AuthControllerIntegrationTests {
     @Autowired
     private DoctorProfileRepository doctorProfileRepository;
 
+    @Autowired
+    private HealthConditionRepository healthConditionRepository;
+
+    @Autowired
+    private ClinicalEncounterRepository clinicalEncounterRepository;
+
+    @Autowired
+    private AccessGrantRepository accessGrantRepository;
+
+    @Autowired
+    private PrescriptionRepository prescriptionRepository;
+
+    @Autowired
+    private ActiveVaultSessionRepository activeVaultSessionRepository;
+
+    @Autowired
+    private LabTestResultRepository labTestResultRepository;
+
     @BeforeEach
     void setUp() {
+        labTestResultRepository.deleteAll();
+        prescriptionRepository.deleteAll();
+        activeVaultSessionRepository.deleteAll();
+        accessGrantRepository.deleteAll();
+        clinicalEncounterRepository.deleteAll();
+        healthConditionRepository.deleteAll();
         patientProfileRepository.deleteAll();
         doctorProfileRepository.deleteAll();
         userRepository.deleteAll();

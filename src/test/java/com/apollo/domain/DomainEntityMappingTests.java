@@ -99,6 +99,7 @@ class DomainEntityMappingTests {
         assertThat(patient.getCreatedAt()).isNotNull();
         assertThat(doctor.getId()).isNotNull();
         assertThat(doctor.getLicenseNumber()).isEqualTo("MD-998822");
+        assertThat(doctor.getDoctorRole()).isEqualTo(com.apollo.domain.enums.DoctorRole.GENERAL_PRACTITIONER);
     }
 
     @Test
