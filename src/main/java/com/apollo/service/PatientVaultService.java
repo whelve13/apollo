@@ -25,4 +25,6 @@ public interface PatientVaultService {
     PatientProfileResponse updateProfile(UUID patientProfileId, UpdatePatientProfileRequest request);
 
     PatientProfileResponse getProfile(UUID patientProfileId);
+
+    List<HealthConditionResponse> syncBaselineConditions(UUID patientProfileId, com.apollo.dto.vault.SyncBaselineConditionsRequest request);
 }

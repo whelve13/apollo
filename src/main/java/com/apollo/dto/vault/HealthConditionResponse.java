@@ -36,6 +36,9 @@ public class HealthConditionResponse {
     @Schema(description = "Date recorded or reported", example = "2023-01-15")
     private LocalDate dateRecorded;
 
+    @Schema(description = "Optional notes or details regarding condition", example = "Mild hives on exposure")
+    private String notes;
+
     @Schema(description = "Timestamp when saved in vault")
     private Instant createdAt;
 }

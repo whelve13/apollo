@@ -57,12 +57,23 @@ public class HealthCondition {
     @Column(name = "source_type", nullable = false, length = 50)
     private SourceType sourceType;
 
+    @Column(name = "notes", length = 1000)
+    private String notes;
+
     @Column(name = "date_recorded")
     private LocalDate dateRecorded;
 
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    public PatientProfile getPatientProfile() {
+        return this.patient;
+    }
+
+    public void setPatientProfile(PatientProfile patientProfile) {
+        this.patient = patientProfile;
+    }
 
     @Override
     public boolean equals(Object o) {

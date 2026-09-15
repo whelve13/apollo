@@ -9,6 +9,7 @@ import com.apollo.dto.vault.AccessGrantResponse;
 import com.apollo.dto.vault.CreateHealthConditionRequest;
 import com.apollo.dto.vault.HealthConditionResponse;
 import com.apollo.dto.vault.PatientVaultTimelineResponse;
+import com.apollo.dto.vault.SyncBaselineConditionsRequest;
 import com.apollo.exception.ErrorResponse;
 import com.apollo.security.CustomUserDetails;
 import com.apollo.service.LabTestResultService;
@@ -33,6 +34,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -85,6 +87,25 @@ public class PatientVaultController {
     public ResponseEntity<List<HealthConditionResponse>> getConditions(
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         List<HealthConditionResponse> response = patientVaultService.getConditions(userDetails.getProfileId());
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary = "Batch synchronize baseline health conditions", description = "Replaces existing patient-declared baseline conditions with the provided list while preserving any doctor-verified or clinician-entered clinical records.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Baseline conditions synchronized successfully",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = HealthConditionResponse.class)))),
+            @ApiResponse(responseCode = "400", description = "Invalid request payload",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires ROLE_PATIENT",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @PutMapping("/conditions/baseline")
+    public ResponseEntity<List<HealthConditionResponse>> syncBaselineConditions(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody SyncBaselineConditionsRequest request) {
+        List<HealthConditionResponse> response = patientVaultService.syncBaselineConditions(userDetails.getProfileId(), request);
         return ResponseEntity.ok(response);
     }
 

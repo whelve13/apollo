@@ -10,7 +10,9 @@ import com.apollo.domain.enums.Role;
 import com.apollo.domain.enums.SourceType;
 import com.apollo.dto.auth.RegisterDoctorRequest;
 import com.apollo.dto.auth.RegisterPatientRequest;
+import com.apollo.dto.vault.BaselineConditionItem;
 import com.apollo.dto.vault.CreateHealthConditionRequest;
+import com.apollo.dto.vault.SyncBaselineConditionsRequest;
 import com.apollo.repository.AccessGrantRepository;
 import com.apollo.repository.ActiveVaultSessionRepository;
 import com.apollo.repository.ClinicalEncounterRepository;
@@ -35,6 +37,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,6 +48,7 @@ import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -383,5 +387,83 @@ class PatientVaultIntegrationTests {
         mockMvc.perform(get("/api/v1/patient/vault/timeline"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.status", is(401)));
+    }
+
+    @Test
+    @DisplayName("PUT /conditions/baseline should replace patient-declared conditions while protecting clinician-entered records")
+    void testSyncBaselineConditionsBatch() throws Exception {
+        String patientToken = registerAndGetToken("patient.sync@apollo.local", "PATIENT");
+        User patientUser = userRepository.findByEmail("patient.sync@apollo.local").orElseThrow();
+        PatientProfile patient = patientProfileRepository.findByUserId(patientUser.getId()).orElseThrow();
+
+        // 1. Insert a clinician/doctor verified condition directly in the database
+        HealthCondition clinicianCondition = healthConditionRepository.save(HealthCondition.builder()
+                .patient(patient)
+                .title("Hypertension Stage 2")
+                .type(HealthConditionType.CHRONIC_CONDITION)
+                .sourceType(SourceType.DOCTOR_VERIFIED)
+                .dateRecorded(LocalDate.of(2023, 5, 10))
+                .notes("Verified during annual checkup")
+                .build());
+
+        // 2. Call PUT /api/v1/patient/vault/conditions/baseline with items A and B
+        BaselineConditionItem itemA = BaselineConditionItem.builder()
+                .title("Penicillin Allergy")
+                .type(HealthConditionType.ALLERGY)
+                .notes("Rash in childhood")
+                .build();
+        BaselineConditionItem itemB = BaselineConditionItem.builder()
+                .title("Asthma")
+                .type(HealthConditionType.CHRONIC_CONDITION)
+                .notes("Mild intermittent")
+                .build();
+
+        SyncBaselineConditionsRequest syncReq1 = SyncBaselineConditionsRequest.builder()
+                .conditions(List.of(itemA, itemB))
+                .build();
+
+        mockMvc.perform(put("/api/v1/patient/vault/conditions/baseline")
+                        .header("Authorization", "Bearer " + patientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(syncReq1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(3)));
+
+        // Verify DB contains A, B, and clinician record
+        List<HealthCondition> conditionsAfterFirstSync = healthConditionRepository.findByPatientIdOrderByDateRecordedDescCreatedAtDesc(patient.getId());
+        assertThat(conditionsAfterFirstSync).hasSize(3);
+        assertThat(conditionsAfterFirstSync.stream().map(HealthCondition::getTitle).toList())
+                .containsExactlyInAnyOrder("Hypertension Stage 2", "Penicillin Allergy", "Asthma");
+
+        // 3. Call endpoint again with items B and C
+        BaselineConditionItem itemC = BaselineConditionItem.builder()
+                .title("Tobacco: Former Smoker")
+                .type(HealthConditionType.LIFESTYLE)
+                .notes("Quit 5 years ago")
+                .build();
+
+        SyncBaselineConditionsRequest syncReq2 = SyncBaselineConditionsRequest.builder()
+                .conditions(List.of(itemB, itemC))
+                .build();
+
+        mockMvc.perform(put("/api/v1/patient/vault/conditions/baseline")
+                        .header("Authorization", "Bearer " + patientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(syncReq2)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(3)));
+
+        // 4. Verify the database only contains B and C (no duplicate B, and item A is removed)
+        // and clinician record was not deleted
+        List<HealthCondition> conditionsAfterSecondSync = healthConditionRepository.findByPatientIdOrderByDateRecordedDescCreatedAtDesc(patient.getId());
+        assertThat(conditionsAfterSecondSync).hasSize(3);
+        List<String> titles = conditionsAfterSecondSync.stream().map(HealthCondition::getTitle).toList();
+        assertThat(titles).containsExactlyInAnyOrder("Hypertension Stage 2", "Asthma", "Tobacco: Former Smoker");
+        assertThat(titles).doesNotContain("Penicillin Allergy");
+
+        // Verify clinician condition is intact
+        HealthCondition reloadedClinicianCondition = healthConditionRepository.findById(clinicianCondition.getId()).orElseThrow();
+        assertThat(reloadedClinicianCondition.getSourceType()).isEqualTo(SourceType.DOCTOR_VERIFIED);
+        assertThat(reloadedClinicianCondition.getTitle()).isEqualTo("Hypertension Stage 2");
     }
 }

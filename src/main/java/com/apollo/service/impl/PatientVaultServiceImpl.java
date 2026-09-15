@@ -13,6 +13,7 @@ import com.apollo.dto.vault.CreateHealthConditionRequest;
 import com.apollo.dto.vault.HealthConditionResponse;
 import com.apollo.dto.vault.PatientProfileSummaryDto;
 import com.apollo.dto.vault.PatientVaultTimelineResponse;
+import com.apollo.dto.vault.SyncBaselineConditionsRequest;
 import com.apollo.exception.ResourceNotFoundException;
 import com.apollo.repository.AccessGrantRepository;
 import com.apollo.repository.ClinicalEncounterRepository;
@@ -199,6 +200,35 @@ public class PatientVaultServiceImpl implements PatientVaultService {
         return mapToPatientProfileResponse(patient);
     }
 
+    @Override
+    @Transactional
+    public List<HealthConditionResponse> syncBaselineConditions(UUID patientProfileId, SyncBaselineConditionsRequest request) {
+        PatientProfile patient = patientProfileRepository.findById(patientProfileId)
+                .orElseThrow(() -> new ResourceNotFoundException("Patient profile not found with id: " + patientProfileId));
+
+        // 1. Delete prior PATIENT_DECLARED conditions for this patient
+        healthConditionRepository.deleteByPatientProfileIdAndSourceTypePatientDeclared(patientProfileId);
+
+        // 2. Insert all items provided in SyncBaselineConditionsRequest with sourceType = PATIENT_DECLARED
+        if (request != null && request.conditions() != null && !request.conditions().isEmpty()) {
+            List<HealthCondition> newConditions = request.conditions().stream()
+                    .filter(item -> item.title() != null && !item.title().trim().isEmpty())
+                    .map(item -> HealthCondition.builder()
+                            .patient(patient)
+                            .title(item.title().trim())
+                            .type(item.type())
+                            .notes(item.notes())
+                            .sourceType(SourceType.PATIENT_DECLARED)
+                            .dateRecorded(LocalDate.now())
+                            .build())
+                    .toList();
+            healthConditionRepository.saveAll(newConditions);
+        }
+
+        // 3. Return the updated list of health conditions
+        return getConditions(patientProfileId);
+    }
+
     private PatientProfileResponse mapToPatientProfileResponse(PatientProfile patient) {
         return PatientProfileResponse.builder()
                 .id(patient.getId())
@@ -220,6 +250,7 @@ public class PatientVaultServiceImpl implements PatientVaultService {
                 .title(condition.getTitle())
                 .type(condition.getType())
                 .sourceType(condition.getSourceType())
+                .notes(condition.getNotes())
                 .dateRecorded(condition.getDateRecorded())
                 .createdAt(condition.getCreatedAt())
                 .build();
