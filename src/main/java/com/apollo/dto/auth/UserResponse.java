@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Getter
@@ -16,8 +17,8 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@Schema(description = "Details of the currently authenticated user")
-public class CurrentUserResponse {
+@Schema(description = "User details response")
+public class UserResponse {
 
     @Schema(description = "User unique identifier")
     private UUID userId;
@@ -35,7 +36,7 @@ public class CurrentUserResponse {
     private String fullName;
 
     @Schema(description = "Date of birth (patient profiles)", example = "1990-05-15")
-    private java.time.LocalDate dateOfBirth;
+    private LocalDate dateOfBirth;
 
     @Schema(description = "Blood type (patient profiles)", example = "O+")
     private String bloodType;

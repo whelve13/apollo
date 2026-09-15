@@ -5,6 +5,8 @@ import com.apollo.domain.entity.ClinicalEncounter;
 import com.apollo.domain.entity.HealthCondition;
 import com.apollo.domain.entity.PatientProfile;
 import com.apollo.domain.enums.SourceType;
+import com.apollo.dto.patient.PatientProfileResponse;
+import com.apollo.dto.patient.UpdatePatientProfileRequest;
 import com.apollo.dto.vault.AccessGrantResponse;
 import com.apollo.dto.vault.ClinicalEncounterSummaryDto;
 import com.apollo.dto.vault.CreateHealthConditionRequest;
@@ -144,6 +146,9 @@ public class PatientVaultServiceImpl implements PatientVaultService {
                 .lastName(patient.getLastName())
                 .dateOfBirth(patient.getDateOfBirth())
                 .bloodType(patient.getBloodType())
+                .gender(patient.getGender())
+                .heightCm(patient.getHeightCm())
+                .weightKg(patient.getWeightKg())
                 .build();
 
         List<HealthConditionResponse> conditions = healthConditionRepository
@@ -162,6 +167,50 @@ public class PatientVaultServiceImpl implements PatientVaultService {
                 .patient(patientSummary)
                 .conditions(conditions)
                 .encounters(encounters)
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public PatientProfileResponse updateProfile(UUID patientProfileId, UpdatePatientProfileRequest request) {
+        PatientProfile patient = patientProfileRepository.findById(patientProfileId)
+                .orElseThrow(() -> new ResourceNotFoundException("Patient profile not found with id: " + patientProfileId));
+
+        if (request.gender() != null) {
+            patient.setGender(request.gender().trim());
+        }
+        if (request.heightCm() != null) {
+            patient.setHeightCm(request.heightCm());
+        }
+        if (request.weightKg() != null) {
+            patient.setWeightKg(request.weightKg());
+        }
+
+        patient = patientProfileRepository.save(patient);
+
+        return mapToPatientProfileResponse(patient);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PatientProfileResponse getProfile(UUID patientProfileId) {
+        PatientProfile patient = patientProfileRepository.findById(patientProfileId)
+                .orElseThrow(() -> new ResourceNotFoundException("Patient profile not found with id: " + patientProfileId));
+        return mapToPatientProfileResponse(patient);
+    }
+
+    private PatientProfileResponse mapToPatientProfileResponse(PatientProfile patient) {
+        return PatientProfileResponse.builder()
+                .id(patient.getId())
+                .userId(patient.getUser() != null ? patient.getUser().getId() : null)
+                .firstName(patient.getFirstName())
+                .lastName(patient.getLastName())
+                .dateOfBirth(patient.getDateOfBirth())
+                .bloodType(patient.getBloodType())
+                .gender(patient.getGender())
+                .heightCm(patient.getHeightCm())
+                .weightKg(patient.getWeightKg())
+                .createdAt(patient.getCreatedAt())
                 .build();
     }
 

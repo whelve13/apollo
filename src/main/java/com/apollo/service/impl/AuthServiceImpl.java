@@ -180,12 +180,22 @@ public class AuthServiceImpl implements AuthService {
 
         UUID profileId = null;
         String fullName = null;
+        java.time.LocalDate dateOfBirth = null;
+        String bloodType = null;
+        String gender = null;
+        Double heightCm = null;
+        Double weightKg = null;
 
         if (user.getRole() == Role.ROLE_PATIENT) {
             PatientProfile p = patientProfileRepository.findByUserId(user.getId()).orElse(null);
             if (p != null) {
                 profileId = p.getId();
                 fullName = p.getFirstName() + " " + p.getLastName();
+                dateOfBirth = p.getDateOfBirth();
+                bloodType = p.getBloodType();
+                gender = p.getGender();
+                heightCm = p.getHeightCm();
+                weightKg = p.getWeightKg();
             }
         } else if (user.getRole() == Role.ROLE_DOCTOR) {
             DoctorProfile d = doctorProfileRepository.findByUserId(user.getId()).orElse(null);
@@ -201,6 +211,11 @@ public class AuthServiceImpl implements AuthService {
                 .email(user.getEmail())
                 .role(user.getRole())
                 .fullName(fullName)
+                .dateOfBirth(dateOfBirth)
+                .bloodType(bloodType)
+                .gender(gender)
+                .heightCm(heightCm)
+                .weightKg(weightKg)
                 .createdAt(user.getCreatedAt())
                 .build();
     }

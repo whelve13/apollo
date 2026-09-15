@@ -100,6 +100,9 @@ public class DoctorVaultServiceImpl implements DoctorVaultService {
                 .lastName(patient.getLastName())
                 .dateOfBirth(patient.getDateOfBirth())
                 .bloodType(patient.getBloodType())
+                .gender(patient.getGender())
+                .heightCm(patient.getHeightCm())
+                .weightKg(patient.getWeightKg())
                 .build();
 
         DoctorRole role = doctor.getDoctorRole();

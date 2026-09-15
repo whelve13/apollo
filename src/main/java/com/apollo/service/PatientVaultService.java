@@ -1,5 +1,7 @@
 package com.apollo.service;
 
+import com.apollo.dto.patient.PatientProfileResponse;
+import com.apollo.dto.patient.UpdatePatientProfileRequest;
 import com.apollo.dto.vault.AccessGrantResponse;
 import com.apollo.dto.vault.CreateHealthConditionRequest;
 import com.apollo.dto.vault.HealthConditionResponse;
@@ -19,4 +21,8 @@ public interface PatientVaultService {
     AccessGrantResponse generateAccessGrant(UUID patientProfileId);
 
     PatientVaultTimelineResponse getTimeline(UUID patientProfileId);
+
+    PatientProfileResponse updateProfile(UUID patientProfileId, UpdatePatientProfileRequest request);
+
+    PatientProfileResponse getProfile(UUID patientProfileId);
 }

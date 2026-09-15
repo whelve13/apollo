@@ -1,4 +1,4 @@
-package com.apollo.dto.vault;
+package com.apollo.dto.patient;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -15,16 +16,19 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@Schema(description = "Demographic summary of the patient profile")
-public class PatientProfileSummaryDto {
+@Schema(description = "Detailed patient profile response")
+public class PatientProfileResponse {
 
     @Schema(description = "Patient profile unique identifier")
     private UUID id;
 
-    @Schema(description = "First name", example = "Jane")
+    @Schema(description = "Associated user unique identifier")
+    private UUID userId;
+
+    @Schema(description = "Patient first name", example = "Jane")
     private String firstName;
 
-    @Schema(description = "Last name", example = "Doe")
+    @Schema(description = "Patient last name", example = "Doe")
     private String lastName;
 
     @Schema(description = "Date of birth", example = "1990-05-15")
@@ -41,4 +45,7 @@ public class PatientProfileSummaryDto {
 
     @Schema(description = "Weight in kilograms", example = "65.0")
     private Double weightKg;
+
+    @Schema(description = "Profile creation timestamp")
+    private Instant createdAt;
 }

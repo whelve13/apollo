@@ -2,6 +2,8 @@ package com.apollo.controller;
 
 import com.apollo.domain.enums.PrescriptionStatus;
 import com.apollo.dto.lab.LabTestResultResponse;
+import com.apollo.dto.patient.PatientProfileResponse;
+import com.apollo.dto.patient.UpdatePatientProfileRequest;
 import com.apollo.dto.prescription.PrescriptionResponse;
 import com.apollo.dto.vault.AccessGrantResponse;
 import com.apollo.dto.vault.CreateHealthConditionRequest;
@@ -28,6 +30,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -167,6 +170,28 @@ public class PatientVaultController {
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @RequestParam(required = false) String testName) {
         List<LabTestResultResponse> response = labTestResultService.getPatientTestResults(userDetails.getProfileId(), testName);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary = "Update patient profile baseline attributes",
+            description = "Updates baseline attributes (gender, height, weight) for the authenticated patient.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Patient profile updated successfully",
+                    content = @Content(schema = @Schema(implementation = PatientProfileResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid request payload",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires ROLE_PATIENT",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Patient profile not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @PatchMapping("/profile")
+    public ResponseEntity<PatientProfileResponse> updateProfile(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody UpdatePatientProfileRequest request) {
+        PatientProfileResponse response = patientVaultService.updateProfile(userDetails.getProfileId(), request);
         return ResponseEntity.ok(response);
     }
 }

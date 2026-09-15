@@ -58,6 +58,15 @@ public class PatientProfile {
     @Column(name = "blood_type", length = 10)
     private String bloodType;
 
+    @Column(name = "gender", length = 20)
+    private String gender;
+
+    @Column(name = "height_cm")
+    private Double heightCm;
+
+    @Column(name = "weight_kg")
+    private Double weightKg;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
