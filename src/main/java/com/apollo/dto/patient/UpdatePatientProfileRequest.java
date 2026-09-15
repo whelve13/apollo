@@ -13,5 +13,13 @@ public record UpdatePatientProfileRequest(
         Double heightCm,
 
         @Schema(description = "Weight in kilograms", example = "65.0")
-        Double weightKg
-) {}
+        Double weightKg,
+
+        @Size(max = 10, message = "Blood type must not exceed 10 characters")
+        @Schema(description = "Blood type (e.g. A+, O-, B+)", example = "O+")
+        String bloodType
+) {
+    public UpdatePatientProfileRequest(String gender, Double heightCm, Double weightKg) {
+        this(gender, heightCm, weightKg, null);
+    }
+}

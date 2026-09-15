@@ -186,6 +186,9 @@ public class PatientVaultServiceImpl implements PatientVaultService {
         if (request.weightKg() != null) {
             patient.setWeightKg(request.weightKg());
         }
+        if (request.bloodType() != null && !request.bloodType().trim().isEmpty()) {
+            patient.setBloodType(request.bloodType().trim().toUpperCase());
+        }
 
         patient = patientProfileRepository.save(patient);
 

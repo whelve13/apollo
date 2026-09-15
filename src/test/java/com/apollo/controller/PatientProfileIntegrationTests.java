@@ -134,7 +134,8 @@ class PatientProfileIntegrationTests {
         UpdatePatientProfileRequest updateRequest = new UpdatePatientProfileRequest(
                 "FEMALE",
                 174.5,
-                68.0
+                68.0,
+                "AB+"
         );
 
         mockMvc.perform(patch("/api/v1/patient/profile")
@@ -144,7 +145,7 @@ class PatientProfileIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.firstName", is("Sarah")))
                 .andExpect(jsonPath("$.lastName", is("Connor")))
-                .andExpect(jsonPath("$.bloodType", is("B+")))
+                .andExpect(jsonPath("$.bloodType", is("AB+")))
                 .andExpect(jsonPath("$.gender", is("FEMALE")))
                 .andExpect(jsonPath("$.heightCm", is(174.5)))
                 .andExpect(jsonPath("$.weightKg", is(68.0)));
@@ -153,6 +154,7 @@ class PatientProfileIntegrationTests {
         mockMvc.perform(get("/api/v1/patient/profile")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bloodType", is("AB+")))
                 .andExpect(jsonPath("$.gender", is("FEMALE")))
                 .andExpect(jsonPath("$.heightCm", is(174.5)))
                 .andExpect(jsonPath("$.weightKg", is(68.0)));
@@ -161,6 +163,7 @@ class PatientProfileIntegrationTests {
         mockMvc.perform(get("/api/v1/auth/me")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bloodType", is("AB+")))
                 .andExpect(jsonPath("$.gender", is("FEMALE")))
                 .andExpect(jsonPath("$.heightCm", is(174.5)))
                 .andExpect(jsonPath("$.weightKg", is(68.0)));
