@@ -260,6 +260,7 @@ public class PatientVaultServiceImpl implements PatientVaultService {
         return PatientProfileResponse.builder()
                 .id(patient.getId())
                 .userId(patient.getUser() != null ? patient.getUser().getId() : null)
+                .email(patient.getUser() != null ? patient.getUser().getEmail() : null)
                 .firstName(patient.getFirstName())
                 .lastName(patient.getLastName())
                 .dateOfBirth(patient.getDateOfBirth())

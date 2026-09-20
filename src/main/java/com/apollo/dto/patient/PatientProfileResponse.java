@@ -25,6 +25,9 @@ public class PatientProfileResponse {
     @Schema(description = "Associated user unique identifier")
     private UUID userId;
 
+    @Schema(description = "Associated user email address", example = "jane.doe@example.com")
+    private String email;
+
     @Schema(description = "Patient first name", example = "Jane")
     private String firstName;
 
