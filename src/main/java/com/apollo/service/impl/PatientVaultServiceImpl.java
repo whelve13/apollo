@@ -14,11 +14,14 @@ import com.apollo.dto.vault.HealthConditionResponse;
 import com.apollo.dto.vault.PatientProfileSummaryDto;
 import com.apollo.dto.vault.PatientVaultTimelineResponse;
 import com.apollo.dto.vault.SyncBaselineConditionsRequest;
+import com.apollo.domain.entity.User;
+import com.apollo.exception.EmailAlreadyExistsException;
 import com.apollo.exception.ResourceNotFoundException;
 import com.apollo.repository.AccessGrantRepository;
 import com.apollo.repository.ClinicalEncounterRepository;
 import com.apollo.repository.HealthConditionRepository;
 import com.apollo.repository.PatientProfileRepository;
+import com.apollo.repository.UserRepository;
 import com.apollo.service.PatientVaultService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +47,7 @@ public class PatientVaultServiceImpl implements PatientVaultService {
     private final HealthConditionRepository healthConditionRepository;
     private final ClinicalEncounterRepository clinicalEncounterRepository;
     private final AccessGrantRepository accessGrantRepository;
+    private final UserRepository userRepository;
 
     @Value("${apollo.vault.access-grant-validity-minutes:15}")
     private int validityMinutes;
@@ -177,6 +181,26 @@ public class PatientVaultServiceImpl implements PatientVaultService {
         PatientProfile patient = patientProfileRepository.findById(patientProfileId)
                 .orElseThrow(() -> new ResourceNotFoundException("Patient profile not found with id: " + patientProfileId));
 
+        if (request.firstName() != null && !request.firstName().trim().isEmpty()) {
+            patient.setFirstName(request.firstName().trim());
+        }
+        if (request.lastName() != null && !request.lastName().trim().isEmpty()) {
+            patient.setLastName(request.lastName().trim());
+        }
+        if (request.dateOfBirth() != null) {
+            patient.setDateOfBirth(request.dateOfBirth());
+        }
+        if (request.email() != null && !request.email().trim().isEmpty()) {
+            String newEmail = request.email().trim().toLowerCase();
+            User user = patient.getUser();
+            if (user != null) {
+                if (userRepository.existsByEmailIgnoreCaseAndIdNot(newEmail, user.getId())) {
+                    throw new EmailAlreadyExistsException(newEmail);
+                }
+                user.setEmail(newEmail);
+                userRepository.save(user);
+            }
+        }
         if (request.gender() != null) {
             patient.setGender(request.gender().trim());
         }

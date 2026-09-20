@@ -49,4 +49,29 @@ public class CustomUserDetailsService implements UserDetailsService {
                 user.getRole()
         );
     }
+
+    @Transactional(readOnly = true)
+    public UserDetails loadUserById(UUID userId) throws UsernameNotFoundException {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with id: " + userId));
+
+        UUID profileId = null;
+        if (user.getRole() == Role.ROLE_PATIENT) {
+            profileId = patientProfileRepository.findByUserId(user.getId())
+                    .map(PatientProfile::getId)
+                    .orElse(null);
+        } else if (user.getRole() == Role.ROLE_DOCTOR) {
+            profileId = doctorProfileRepository.findByUserId(user.getId())
+                    .map(DoctorProfile::getId)
+                    .orElse(null);
+        }
+
+        return CustomUserDetails.create(
+                user.getId(),
+                profileId,
+                user.getEmail(),
+                user.getPasswordHash(),
+                user.getRole()
+        );
+    }
 }

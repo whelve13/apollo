@@ -277,4 +277,63 @@ class PatientProfileIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.conditions", hasSize(3)));
     }
+
+    @Test
+    @DisplayName("PATCH /api/v1/patient/profile updates name, date of birth, and email successfully")
+    void updatePatientProfile_NameEmailDob_Success() throws Exception {
+        String token = registerPatientAndGetToken("editable.profile@test.com");
+
+        UpdatePatientProfileRequest updateRequest = new UpdatePatientProfileRequest(
+                "Eleanor",
+                "Vance",
+                LocalDate.of(1992, 8, 14),
+                "eleanor.updated@test.com",
+                null,
+                null,
+                null,
+                null
+        );
+
+        mockMvc.perform(patch("/api/v1/patient/profile")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(updateRequest)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.firstName", is("Eleanor")))
+                .andExpect(jsonPath("$.lastName", is("Vance")))
+                .andExpect(jsonPath("$.dateOfBirth", is("1992-08-14")));
+
+        // Verify GET /api/v1/auth/me reflects the updated name, email, and DOB
+        mockMvc.perform(get("/api/v1/auth/me")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fullName", is("Eleanor Vance")))
+                .andExpect(jsonPath("$.email", is("eleanor.updated@test.com")))
+                .andExpect(jsonPath("$.dateOfBirth", is("1992-08-14")));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/v1/patient/profile with duplicate email returns 409 Conflict")
+    void updatePatientProfile_DuplicateEmail_Returns409() throws Exception {
+        registerPatientAndGetToken("existing.user@test.com");
+        String token = registerPatientAndGetToken("another.user@test.com");
+
+        UpdatePatientProfileRequest updateRequest = new UpdatePatientProfileRequest(
+                null,
+                null,
+                null,
+                "EXISTING.USER@test.com",
+                null,
+                null,
+                null,
+                null
+        );
+
+        mockMvc.perform(patch("/api/v1/patient/profile")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(updateRequest)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error", is("Conflict")));
+    }
 }
