@@ -321,6 +321,40 @@ class AuthControllerIntegrationTests {
     }
 
     @Test
+    @DisplayName("Should return doctor profile details including licenseNumber and specialty when accessing /me")
+    void testGetCurrentDoctorWithValidToken() throws Exception {
+        RegisterDoctorRequest register = RegisterDoctorRequest.builder()
+                .email("doctor.me@hospital.org")
+                .password("DoctorPass123!")
+                .firstName("Gregory")
+                .lastName("House")
+                .licenseNumber("MD-DIAG-101")
+                .specialty("Diagnostics")
+                .build();
+
+        MvcResult result = mockMvc.perform(post("/api/v1/auth/register/doctor")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(register)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String responseBody = result.getResponse().getContentAsString();
+        String token = objectMapper.readTree(responseBody).get("token").asText();
+
+        mockMvc.perform(get("/api/v1/auth/me")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email", is("doctor.me@hospital.org")))
+                .andExpect(jsonPath("$.role", is(Role.ROLE_DOCTOR.name())))
+                .andExpect(jsonPath("$.fullName", is("Dr. Gregory House")))
+                .andExpect(jsonPath("$.licenseNumber", is("MD-DIAG-101")))
+                .andExpect(jsonPath("$.specialty", is("Diagnostics")))
+                .andExpect(jsonPath("$.userId", notNullValue()))
+                .andExpect(jsonPath("$.profileId", notNullValue()));
+    }
+
+
+    @Test
     @DisplayName("Should reject /me endpoint with 401 Unauthorized when token is missing")
     void testGetCurrentUserWithoutTokenFails() throws Exception {
         mockMvc.perform(get("/api/v1/auth/me"))

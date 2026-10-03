@@ -186,6 +186,10 @@ public class AuthServiceImpl implements AuthService {
         Double heightCm = null;
         Double weightKg = null;
 
+        String licenseNumber = null;
+        String specialty = null;
+        com.apollo.domain.enums.DoctorRole doctorRole = null;
+
         if (user.getRole() == Role.ROLE_PATIENT) {
             PatientProfile p = patientProfileRepository.findByUserId(user.getId()).orElse(null);
             if (p != null) {
@@ -202,6 +206,9 @@ public class AuthServiceImpl implements AuthService {
             if (d != null) {
                 profileId = d.getId();
                 fullName = "Dr. " + d.getFirstName() + " " + d.getLastName();
+                licenseNumber = d.getLicenseNumber();
+                specialty = d.getSpecialty();
+                doctorRole = d.getDoctorRole();
             }
         }
 
@@ -216,6 +223,9 @@ public class AuthServiceImpl implements AuthService {
                 .gender(gender)
                 .heightCm(heightCm)
                 .weightKg(weightKg)
+                .licenseNumber(licenseNumber)
+                .specialty(specialty)
+                .doctorRole(doctorRole)
                 .createdAt(user.getCreatedAt())
                 .build();
     }

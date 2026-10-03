@@ -49,6 +49,15 @@ public class CurrentUserResponse {
     @Schema(description = "Weight in kilograms (patient profiles)", example = "65.0")
     private Double weightKg;
 
+    @Schema(description = "Medical license number (doctor profiles)", example = "MD-12345678")
+    private String licenseNumber;
+
+    @Schema(description = "Medical specialty (doctor profiles)", example = "Cardiology")
+    private String specialty;
+
+    @Schema(description = "Doctor role category (doctor profiles)", example = "SPECIALIST")
+    private com.apollo.domain.enums.DoctorRole doctorRole;
+
     @Schema(description = "Account creation timestamp")
     private Instant createdAt;
 }
