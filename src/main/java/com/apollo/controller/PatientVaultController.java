@@ -1,6 +1,8 @@
 package com.apollo.controller;
 
 import com.apollo.domain.enums.PrescriptionStatus;
+import com.apollo.dto.lab.LabTestPanelRequest;
+import com.apollo.dto.lab.LabTestPanelResponse;
 import com.apollo.dto.lab.LabTestResultResponse;
 import com.apollo.dto.patient.PatientProfileResponse;
 import com.apollo.dto.patient.UpdatePatientProfileRequest;
@@ -177,7 +179,7 @@ public class PatientVaultController {
     }
 
     @Operation(summary = "Get patient diagnostic lab test results",
-            description = "Retrieves time-series lab test results for the patient sorted chronologically ascending (recordedAt ASC) for trend charting. Optionally filtered by testName.")
+            description = "Retrieves FINAL lab test results for the patient (doctor-verified and patient-reported) sorted chronologically ascending (recordedAt ASC) for trend charting. Drafts are never returned. Optionally filtered by testName, compared case-insensitively.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Lab test results retrieved successfully",
                     content = @Content(array = @ArraySchema(schema = @Schema(implementation = LabTestResultResponse.class)))),
@@ -192,6 +194,44 @@ public class PatientVaultController {
             @RequestParam(required = false) String testName) {
         List<LabTestResultResponse> response = labTestResultService.getPatientTestResults(userDetails.getProfileId(), testName);
         return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary = "Add patient-reported lab test results",
+            description = "Atomically saves a lab panel entered by the patient. Records are stored as FINAL with source PATIENT_REPORTED and become visible to clinicians with an active vault session. Drafts are not supported for patients.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Lab test panel recorded successfully",
+                    content = @Content(schema = @Schema(implementation = LabTestPanelResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid request payload",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires ROLE_PATIENT",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @PostMapping("/test-results")
+    public ResponseEntity<LabTestPanelResponse> addTestResults(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody LabTestPanelRequest request) {
+        LabTestPanelResponse response = labTestResultService.recordPatientTestPanel(userDetails.getProfileId(), request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @Operation(summary = "Delete a patient-reported lab test result", description = "Removes a lab result from the vault. Patients can only delete PATIENT_REPORTED records.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Lab test result successfully removed"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Cannot delete doctor-verified results",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Result not found or does not belong to patient",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @DeleteMapping("/test-results/{testResultId}")
+    public ResponseEntity<Void> deleteTestResult(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable UUID testResultId) {
+        labTestResultService.deletePatientTestResult(userDetails.getProfileId(), testResultId);
+        return ResponseEntity.noContent().build();
     }
 
     @Operation(summary = "Update patient profile baseline attributes",

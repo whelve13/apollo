@@ -6,7 +6,9 @@ import com.apollo.dto.doctor.UnlockVaultRequest;
 import com.apollo.dto.doctor.UnlockedVaultResponse;
 import com.apollo.exception.ErrorResponse;
 import com.apollo.security.CustomUserDetails;
+import com.apollo.dto.lab.CreateLabTestPanelRequest;
 import com.apollo.dto.lab.CreateLabTestResultRequest;
+import com.apollo.dto.lab.LabTestPanelResponse;
 import com.apollo.dto.lab.LabTestResultResponse;
 import com.apollo.dto.prescription.CreatePrescriptionRequest;
 import com.apollo.dto.prescription.PrescriptionResponse;
@@ -107,8 +109,8 @@ public class DoctorVaultController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @Operation(summary = "Record a numerical lab test result or biomarker measurement",
-            description = "Appends a structured numerical diagnostic test result for the patient. Permitted for General Practitioners, Specialists, and Lab Technicians with an active 24-hour vault session.")
+    @Operation(summary = "Record a lab test result or biomarker measurement",
+            description = "Appends a single diagnostic test result for the patient: a numeric value, a censored value (qualifier + bound), or a text result, with optional reference range, flag, comment and DRAFT/FINAL status. Permitted for General Practitioners, Specialists, and Lab Technicians with an active 24-hour vault session.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Lab test result recorded successfully",
                     content = @Content(schema = @Schema(implementation = LabTestResultResponse.class))),
@@ -126,6 +128,28 @@ public class DoctorVaultController {
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @Valid @RequestBody CreateLabTestResultRequest request) {
         LabTestResultResponse response = labTestResultService.recordTestResult(userDetails.getProfileId(), request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @Operation(summary = "Record a lab test panel in one request",
+            description = "Atomically saves every entry of a lab panel (all entries are stored, or none) under a server-generated panelId, together with the template code, template version and per-entry key. Same role and 24-hour session rules as a single result.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Lab test panel recorded successfully",
+                    content = @Content(schema = @Schema(implementation = LabTestPanelResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid request payload",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires active 24h session and authorized doctor role",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Patient or doctor not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @PostMapping("/test-results/panels")
+    public ResponseEntity<LabTestPanelResponse> recordTestPanel(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody CreateLabTestPanelRequest request) {
+        LabTestPanelResponse response = labTestResultService.recordTestPanel(userDetails.getProfileId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 }
