@@ -5,7 +5,6 @@ import com.apollo.domain.entity.ActiveVaultSession;
 import com.apollo.domain.entity.ClinicalEncounter;
 import com.apollo.domain.entity.DoctorProfile;
 import com.apollo.domain.entity.HealthCondition;
-import com.apollo.domain.entity.LabTestResult;
 import com.apollo.domain.entity.PatientProfile;
 import com.apollo.domain.entity.Prescription;
 import com.apollo.domain.enums.DoctorRole;
@@ -28,10 +27,10 @@ import com.apollo.repository.ActiveVaultSessionRepository;
 import com.apollo.repository.ClinicalEncounterRepository;
 import com.apollo.repository.DoctorProfileRepository;
 import com.apollo.repository.HealthConditionRepository;
-import com.apollo.repository.LabTestResultRepository;
 import com.apollo.repository.PatientProfileRepository;
 import com.apollo.repository.PrescriptionRepository;
 import com.apollo.service.DoctorVaultService;
+import com.apollo.service.LabTestResultService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
@@ -57,7 +56,7 @@ public class DoctorVaultServiceImpl implements DoctorVaultService {
     private final ClinicalEncounterRepository clinicalEncounterRepository;
     private final ActiveVaultSessionRepository activeVaultSessionRepository;
     private final PrescriptionRepository prescriptionRepository;
-    private final LabTestResultRepository labTestResultRepository;
+    private final LabTestResultService labTestResultService;
 
     @Override
     @Transactional
@@ -145,19 +144,11 @@ public class DoctorVaultServiceImpl implements DoctorVaultService {
                     .map(this::mapToPrescriptionResponse)
                     .toList();
 
-            testResults = labTestResultRepository
-                    .findByPatientIdOrderByRecordedAtAscCreatedAtAsc(patient.getId())
-                    .stream()
-                    .map(this::mapToLabTestResultResponse)
-                    .toList();
+            testResults = labTestResultService.getTestResultsForDoctor(patient.getId(), doctor.getId());
 
         } else if (role == DoctorRole.LAB_TECHNICIAN) {
             // Lab tech only sees demographics and test results
-            testResults = labTestResultRepository
-                    .findByPatientIdOrderByRecordedAtAscCreatedAtAsc(patient.getId())
-                    .stream()
-                    .map(this::mapToLabTestResultResponse)
-                    .toList();
+            testResults = labTestResultService.getTestResultsForDoctor(patient.getId(), doctor.getId());
 
         } else if (role == DoctorRole.PHARMACIST) {
             // Pharmacist only sees demographics and prescriptions
@@ -285,21 +276,6 @@ public class DoctorVaultServiceImpl implements DoctorVaultService {
                 .status(p.getStatus())
                 .issuedAt(p.getIssuedAt())
                 .expiresAt(p.getExpiresAt())
-                .build();
-    }
-
-    private LabTestResultResponse mapToLabTestResultResponse(LabTestResult r) {
-        String docName = "Dr. " + r.getDoctor().getFirstName() + " " + r.getDoctor().getLastName();
-        return LabTestResultResponse.builder()
-                .id(r.getId())
-                .patientId(r.getPatient().getId())
-                .doctorId(r.getDoctor().getId())
-                .doctorName(docName)
-                .testName(r.getTestName())
-                .numericValue(r.getNumericValue())
-                .unit(r.getUnit())
-                .recordedAt(r.getRecordedAt())
-                .createdAt(r.getCreatedAt())
                 .build();
     }
 }
