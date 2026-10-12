@@ -17,6 +17,7 @@ import com.apollo.dto.doctor.UnlockVaultRequest;
 import com.apollo.dto.doctor.UnlockedVaultResponse;
 import com.apollo.dto.lab.LabTestResultResponse;
 import com.apollo.dto.prescription.PrescriptionResponse;
+import com.apollo.dto.vision.VisionPrescriptionResponse;
 import com.apollo.dto.vault.ClinicalEncounterSummaryDto;
 import com.apollo.dto.vault.HealthConditionResponse;
 import com.apollo.dto.vault.PatientProfileSummaryDto;
@@ -31,6 +32,7 @@ import com.apollo.repository.PatientProfileRepository;
 import com.apollo.repository.PrescriptionRepository;
 import com.apollo.service.DoctorVaultService;
 import com.apollo.service.LabTestResultService;
+import com.apollo.service.VisionPrescriptionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
@@ -57,6 +59,7 @@ public class DoctorVaultServiceImpl implements DoctorVaultService {
     private final ActiveVaultSessionRepository activeVaultSessionRepository;
     private final PrescriptionRepository prescriptionRepository;
     private final LabTestResultService labTestResultService;
+    private final VisionPrescriptionService visionPrescriptionService;
 
     @Override
     @Transactional
@@ -105,6 +108,11 @@ public class DoctorVaultServiceImpl implements DoctorVaultService {
                 .build();
 
         DoctorRole role = doctor.getDoctorRole();
+
+        // Unlike the lists below, glasses prescriptions are not filtered by doctor role: every role that
+        // can unlock the vault sees them, which is what the frontend's Glasses tab is built for.
+        List<VisionPrescriptionResponse> visionPrescriptions =
+                visionPrescriptionService.getVisionPrescriptions(patient.getId());
 
         List<HealthConditionResponse> allConditions = Collections.emptyList();
         List<HealthConditionResponse> allergies = Collections.emptyList();
@@ -169,6 +177,7 @@ public class DoctorVaultServiceImpl implements DoctorVaultService {
                 .sessionExpiresAt(session.getExpiresAt())
                 .prescriptions(prescriptions)
                 .testResults(testResults)
+                .visionPrescriptions(visionPrescriptions)
                 .build();
     }
 

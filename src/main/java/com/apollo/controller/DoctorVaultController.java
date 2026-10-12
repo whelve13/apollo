@@ -12,9 +12,12 @@ import com.apollo.dto.lab.LabTestPanelResponse;
 import com.apollo.dto.lab.LabTestResultResponse;
 import com.apollo.dto.prescription.CreatePrescriptionRequest;
 import com.apollo.dto.prescription.PrescriptionResponse;
+import com.apollo.dto.vision.CreateVisionPrescriptionRequest;
+import com.apollo.dto.vision.VisionPrescriptionResponse;
 import com.apollo.service.DoctorVaultService;
 import com.apollo.service.LabTestResultService;
 import com.apollo.service.PrescriptionService;
+import com.apollo.service.VisionPrescriptionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -44,6 +47,7 @@ public class DoctorVaultController {
     private final DoctorVaultService doctorVaultService;
     private final PrescriptionService prescriptionService;
     private final LabTestResultService labTestResultService;
+    private final VisionPrescriptionService visionPrescriptionService;
 
     @Operation(summary = "Unlock patient vault via 6-digit access PIN",
             description = "Validates and consumes a single-use 6-digit consultation access PIN. Unlocks patient demographics, baseline health records, and past consultation history for clinical review.")
@@ -106,6 +110,28 @@ public class DoctorVaultController {
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @Valid @RequestBody CreatePrescriptionRequest request) {
         PrescriptionResponse response = prescriptionService.issuePrescription(userDetails.getProfileId(), request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @Operation(summary = "Issue a glasses (vision) prescription",
+            description = "Issues a glasses prescription with per-eye sphere, cylinder, axis and add, plus optional pupillary distance, notes and validity date. Permitted for General Practitioners and Specialists with an active 24-hour vault session for the patient. doctorId, doctorName and issuedAt are always set by the server.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Glasses prescription issued successfully",
+                    content = @Content(schema = @Schema(implementation = VisionPrescriptionResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid request payload; the message names the rule that failed",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires active 24h session and a general practitioner or specialist role",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Patient, doctor, or encounter not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @PostMapping("/vision-prescriptions")
+    public ResponseEntity<VisionPrescriptionResponse> issueVisionPrescription(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody CreateVisionPrescriptionRequest request) {
+        VisionPrescriptionResponse response = visionPrescriptionService.issueVisionPrescription(userDetails.getProfileId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

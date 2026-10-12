@@ -46,4 +46,7 @@ public class UnlockedVaultResponse {
 
     @Schema(description = "Biometric and diagnostic lab test results")
     private List<com.apollo.dto.lab.LabTestResultResponse> testResults;
+
+    @Schema(description = "Glasses (vision) prescriptions, newest first")
+    private List<com.apollo.dto.vision.VisionPrescriptionResponse> visionPrescriptions;
 }

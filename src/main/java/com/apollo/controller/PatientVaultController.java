@@ -7,6 +7,7 @@ import com.apollo.dto.lab.LabTestResultResponse;
 import com.apollo.dto.patient.PatientProfileResponse;
 import com.apollo.dto.patient.UpdatePatientProfileRequest;
 import com.apollo.dto.prescription.PrescriptionResponse;
+import com.apollo.dto.vision.VisionPrescriptionResponse;
 import com.apollo.dto.vault.AccessGrantResponse;
 import com.apollo.dto.vault.CreateHealthConditionRequest;
 import com.apollo.dto.vault.HealthConditionResponse;
@@ -17,6 +18,7 @@ import com.apollo.security.CustomUserDetails;
 import com.apollo.service.LabTestResultService;
 import com.apollo.service.PatientVaultService;
 import com.apollo.service.PrescriptionService;
+import com.apollo.service.VisionPrescriptionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -56,6 +58,7 @@ public class PatientVaultController {
     private final PatientVaultService patientVaultService;
     private final PrescriptionService prescriptionService;
     private final LabTestResultService labTestResultService;
+    private final VisionPrescriptionService visionPrescriptionService;
 
     @Operation(summary = "Add a baseline health condition or allergy", description = "Records a foundational patient-declared medical condition in the vault.")
     @ApiResponses({
@@ -175,6 +178,23 @@ public class PatientVaultController {
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @RequestParam(required = false) PrescriptionStatus status) {
         List<PrescriptionResponse> response = prescriptionService.getPatientPrescriptions(userDetails.getProfileId(), status);
+        return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary = "List patient glasses (vision) prescriptions",
+            description = "Retrieves the authenticated patient's own glasses prescriptions, newest first. Returns an empty array when there are none. The patient is always taken from the token.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "List of glasses prescriptions retrieved successfully",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = VisionPrescriptionResponse.class)))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires ROLE_PATIENT",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @GetMapping("/vision-prescriptions")
+    public ResponseEntity<List<VisionPrescriptionResponse>> getVisionPrescriptions(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        List<VisionPrescriptionResponse> response = visionPrescriptionService.getVisionPrescriptions(userDetails.getProfileId());
         return ResponseEntity.ok(response);
     }
 
