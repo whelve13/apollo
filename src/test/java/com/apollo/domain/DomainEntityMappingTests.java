@@ -58,6 +58,9 @@ class DomainEntityMappingTests {
     @Autowired
     private AccessGrantRepository accessGrantRepository;
 
+    @Autowired
+    private com.apollo.repository.VisionPrescriptionRepository visionPrescriptionRepository;
+
     @Test
     @DisplayName("Should persist Patient and Doctor profiles linked to User accounts")
     void shouldPersistPatientAndDoctorProfiles() {
@@ -264,5 +267,60 @@ class DomainEntityMappingTests {
         assertThat(prescription.getId()).isNotNull();
         assertThat(prescription.getEncounter()).isNull(); // Decoupled prescription
         assertThat(prescription.getStatus()).isEqualTo(PrescriptionStatus.ACTIVE);
+    }
+
+    @Test
+    @DisplayName("Should persist VisionPrescription linked to patient and doctor with embeddable eye values")
+    void shouldPersistVisionPrescription() {
+        User pUser = userRepository.save(User.builder()
+                .email("patient.vision@apollo.local")
+                .passwordHash("hash")
+                .role(Role.ROLE_PATIENT)
+                .build());
+        PatientProfile patient = patientProfileRepository.save(PatientProfile.builder()
+                .user(pUser)
+                .firstName("Oliver")
+                .lastName("Queen")
+                .dateOfBirth(LocalDate.of(1985, 5, 16))
+                .build());
+
+        User dUser = userRepository.save(User.builder()
+                .email("dr.vision@apollo.local")
+                .passwordHash("hash")
+                .role(Role.ROLE_DOCTOR)
+                .build());
+        DoctorProfile doctor = doctorProfileRepository.save(DoctorProfile.builder()
+                .user(dUser)
+                .firstName("Stephen")
+                .lastName("Strange")
+                .licenseNumber("MD-VISION-1")
+                .specialty("Ophthalmology")
+                .build());
+
+        com.apollo.domain.entity.VisionPrescription vp = com.apollo.domain.entity.VisionPrescription.builder()
+                .patient(patient)
+                .doctor(doctor)
+                .rightEye(com.apollo.domain.entity.VisionEyeValues.builder()
+                        .sphere(new java.math.BigDecimal("-2.50"))
+                        .cylinder(new java.math.BigDecimal("-0.75"))
+                        .axis((short) 180)
+                        .addPower(new java.math.BigDecimal("1.50"))
+                        .build())
+                .leftEye(com.apollo.domain.entity.VisionEyeValues.builder()
+                        .sphere(new java.math.BigDecimal("-1.75"))
+                        .addPower(new java.math.BigDecimal("1.50"))
+                        .build())
+                .pupillaryDistanceMm(new java.math.BigDecimal("63.0"))
+                .notes("Progressive lenses for reading and distance.")
+                .issuedAt(Instant.now())
+                .expiresAt(Instant.now().plus(730, ChronoUnit.DAYS))
+                .build();
+        visionPrescriptionRepository.save(vp);
+
+        assertThat(vp.getId()).isNotNull();
+        assertThat(vp.getCreatedAt()).isNotNull();
+        assertThat(vp.getRightEye().getSphere()).isEqualByComparingTo("-2.50");
+        assertThat(vp.getLeftEye().getCylinder()).isNull();
+        assertThat(vp.getDoctor().getSpecialty()).isEqualTo("Ophthalmology");
     }
 }
