@@ -1,0 +1,42 @@
+name: Render Keep-Alive Ping
+
+on:
+  schedule:
+    # Run every 5 minutes to prevent Render free-tier cold sleep (which occurs after 15 minutes of inactivity)
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: keep-alive-ping
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    name: Ping Backend Server
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Ping Health Endpoint
+        run: |
+          echo "Executing keep-alive ping at $(date -u)"
+          HEALTH_URL="https://apollo-backend-ouuq.onrender.com/api/v1/health"
+          FALLBACK_URL="https://apollo-backend-ouuq.onrender.com/v3/api-docs"
+
+          # Attempt primary lightweight health check
+          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" --max-time 45 "$HEALTH_URL" || echo "000")
+          echo "Health endpoint ($HEALTH_URL) responded with HTTP $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" = "200" ]; then
+            cat response.json
+            echo -e "\nServer is healthy and active."
+          else
+            echo "Health endpoint returned $HTTP_STATUS. Attempting fallback to OpenAPI docs..."
+            FALLBACK_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 45 "$FALLBACK_URL" || echo "000")
+            echo "Fallback endpoint ($FALLBACK_URL) responded with HTTP $FALLBACK_STATUS"
+            if [ "$FALLBACK_STATUS" = "200" ]; then
+              echo "Server successfully awakened via fallback endpoint."
+            else
+              echo "Warning: Server ping returned status $FALLBACK_STATUS"
+            fi
+          fi
