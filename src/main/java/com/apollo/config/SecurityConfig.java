@@ -89,6 +89,12 @@ public class SecurityConfig {
         patterns.add("http://127.0.0.1:*");
         patterns.add("https://localhost:*");
         patterns.add("https://*.vercel.app");
+        patterns.add("https://*.exp.direct");
+        patterns.add("http://*.exp.direct");
+        patterns.add("https://*.ngrok-free.app");
+        patterns.add("http://*.ngrok-free.app");
+        patterns.add("https://*.ngrok.io");
+        patterns.add("https://*.loca.lt");
 
         configuration.setAllowedOriginPatterns(new ArrayList<>(patterns));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
