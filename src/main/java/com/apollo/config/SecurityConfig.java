@@ -38,7 +38,7 @@ public class SecurityConfig {
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthenticationFilter,
             JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint,
-            @Value("${cors.allowed-origins:http://localhost:3000,http://localhost:5173}") String allowedOrigins) {
+            @Value("${cors.allowed-origins:http://localhost:3000,https://apollo-front-540x.onrender.com,http://localhost:5173}") String allowedOrigins) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.jwtAuthenticationEntryPoint = jwtAuthenticationEntryPoint;
         this.allowedOrigins = allowedOrigins;
