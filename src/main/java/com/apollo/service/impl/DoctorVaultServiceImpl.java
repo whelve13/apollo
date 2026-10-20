@@ -272,17 +272,20 @@ public class DoctorVaultServiceImpl implements DoctorVaultService {
     }
 
     private PrescriptionResponse mapToPrescriptionResponse(Prescription p) {
-        String docName = "Dr. " + p.getDoctor().getFirstName() + " " + p.getDoctor().getLastName();
+        DoctorProfile doc = p.getDoctor();
+        String docName = doc != null ? "Dr. " + doc.getFirstName() + " " + doc.getLastName() : null;
         return PrescriptionResponse.builder()
                 .id(p.getId())
                 .patientId(p.getPatient().getId())
-                .doctorId(p.getDoctor().getId())
+                .doctorId(doc != null ? doc.getId() : null)
                 .doctorName(docName)
                 .encounterId(p.getEncounter() != null ? p.getEncounter().getId() : null)
                 .medicationName(p.getMedicationName())
                 .dosage(p.getDosage())
+                .frequency(p.getFrequency())
                 .instructions(p.getInstructions())
                 .status(p.getStatus())
+                .source(p.getSource() != null ? p.getSource() : SourceType.DOCTOR_VERIFIED)
                 .issuedAt(p.getIssuedAt())
                 .expiresAt(p.getExpiresAt())
                 .build();

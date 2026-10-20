@@ -1,6 +1,7 @@
 package com.apollo.domain.entity;
 
 import com.apollo.domain.enums.PrescriptionStatus;
+import com.apollo.domain.enums.SourceType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
@@ -18,6 +19,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.ColumnDefault;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
@@ -48,15 +50,18 @@ public class Prescription {
     @JoinColumn(name = "patient_id", nullable = false)
     private PatientProfile patient;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "doctor_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "doctor_id")
     private DoctorProfile doctor;
 
     @Column(name = "medication_name", nullable = false, length = 200)
     private String medicationName;
 
-    @Column(name = "dosage", nullable = false, length = 100)
+    @Column(name = "dosage", length = 100)
     private String dosage;
+
+    @Column(name = "frequency", length = 100)
+    private String frequency;
 
     @Column(name = "instructions", columnDefinition = "TEXT")
     private String instructions;
@@ -65,10 +70,16 @@ public class Prescription {
     @Column(name = "status", nullable = false, length = 32)
     private PrescriptionStatus status;
 
+    @Builder.Default
+    @ColumnDefault("'DOCTOR_VERIFIED'")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source", nullable = false, length = 30)
+    private SourceType source = SourceType.DOCTOR_VERIFIED;
+
     @Column(name = "issued_at", nullable = false)
     private Instant issuedAt;
 
-    @Column(name = "expires_at", nullable = false)
+    @Column(name = "expires_at")
     private Instant expiresAt;
 
     @CreatedDate

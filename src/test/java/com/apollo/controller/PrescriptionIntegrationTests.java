@@ -10,6 +10,7 @@ import com.apollo.dto.doctor.CreateEncounterRequest;
 import com.apollo.dto.doctor.UnlockVaultRequest;
 import com.apollo.dto.prescription.CreatePrescriptionRequest;
 import com.apollo.dto.prescription.UpdatePrescriptionStatusRequest;
+import com.apollo.dto.vault.PatientPrescriptionRequest;
 import com.apollo.repository.AccessGrantRepository;
 import com.apollo.repository.ActiveVaultSessionRepository;
 import com.apollo.repository.ClinicalEncounterRepository;
@@ -45,7 +46,9 @@ import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -664,6 +667,128 @@ class PrescriptionIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Patient can create, retrieve, update, toggle status, and delete patient-declared prescription, but cannot delete doctor-verified prescription")
+    void testPatientDeclaredPrescriptionLifecycle() throws Exception {
+        String patientToken = registerAndGetToken("patient.declared.rx@apollo.local", "PATIENT");
+        String doctorToken = registerAndGetToken("doctor.declared.rx@apollo.local", "DOCTOR");
+        PatientProfile patient = getPatientProfile(patientToken);
+        DoctorProfile doctor = getDoctorProfile(doctorToken);
+
+        // 1. Create a patient-declared prescription
+        PatientPrescriptionRequest createReq = PatientPrescriptionRequest.builder()
+                .medicationName("Ibuprofen 400mg")
+                .dosage("1 tablet")
+                .frequency("Twice daily")
+                .instructions("Take after meals")
+                .issuedAt(Instant.now().minus(2, ChronoUnit.DAYS))
+                .build();
+
+        MvcResult createResult = mockMvc.perform(post("/api/v1/patient/vault/prescriptions")
+                        .header("Authorization", "Bearer " + patientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createReq)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id", notNullValue()))
+                .andExpect(jsonPath("$.patientId", is(patient.getId().toString())))
+                .andExpect(jsonPath("$.doctorId", nullValue()))
+                .andExpect(jsonPath("$.doctorName", nullValue()))
+                .andExpect(jsonPath("$.medicationName", is("Ibuprofen 400mg")))
+                .andExpect(jsonPath("$.dosage", is("1 tablet")))
+                .andExpect(jsonPath("$.frequency", is("Twice daily")))
+                .andExpect(jsonPath("$.instructions", is("Take after meals")))
+                .andExpect(jsonPath("$.status", is("ACTIVE")))
+                .andExpect(jsonPath("$.source", is("PATIENT_DECLARED")))
+                .andReturn();
+
+        UUID patientPrescId = UUID.fromString(objectMapper.readTree(createResult.getResponse().getContentAsString()).get("id").asText());
+
+        // 2. Retrieve prescriptions via GET /api/v1/patient/vault/prescriptions
+        mockMvc.perform(get("/api/v1/patient/vault/prescriptions")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id", is(patientPrescId.toString())))
+                .andExpect(jsonPath("$[0].source", is("PATIENT_DECLARED")))
+                .andExpect(jsonPath("$[0].frequency", is("Twice daily")));
+
+        // 3. Update patient prescription via PUT /api/v1/patient/vault/prescriptions/{id}
+        PatientPrescriptionRequest updateReq = PatientPrescriptionRequest.builder()
+                .medicationName("Ibuprofen 600mg")
+                .dosage("1 tablet")
+                .frequency("Three times daily")
+                .instructions("Take with a glass of water")
+                .build();
+
+        mockMvc.perform(put("/api/v1/patient/vault/prescriptions/" + patientPrescId)
+                        .header("Authorization", "Bearer " + patientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(updateReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(patientPrescId.toString())))
+                .andExpect(jsonPath("$.medicationName", is("Ibuprofen 600mg")))
+                .andExpect(jsonPath("$.frequency", is("Three times daily")))
+                .andExpect(jsonPath("$.instructions", is("Take with a glass of water")));
+
+        // 4. Toggle status to FULFILLED, then back to ACTIVE
+        mockMvc.perform(patch("/api/v1/prescriptions/" + patientPrescId + "/status")
+                        .header("Authorization", "Bearer " + patientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(UpdatePrescriptionStatusRequest.builder().status(PrescriptionStatus.FULFILLED).build())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status", is("FULFILLED")));
+
+        mockMvc.perform(patch("/api/v1/prescriptions/" + patientPrescId + "/status")
+                        .header("Authorization", "Bearer " + patientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(UpdatePrescriptionStatusRequest.builder().status(PrescriptionStatus.ACTIVE).build())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status", is("ACTIVE")));
+
+        // 5. Create a doctor-verified prescription
+        unlockVaultSession(patientToken, doctorToken);
+        CreatePrescriptionRequest docRxReq = CreatePrescriptionRequest.builder()
+                .patientId(patient.getId())
+                .medicationName("Amoxicillin 500mg")
+                .dosage("1 capsule TID")
+                .instructions("Complete full course")
+                .expiresAt(Instant.now().plus(14, ChronoUnit.DAYS))
+                .build();
+
+        MvcResult docRxResult = mockMvc.perform(post("/api/v1/doctor/prescriptions")
+                        .header("Authorization", "Bearer " + doctorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(docRxReq)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        UUID docPrescId = UUID.fromString(objectMapper.readTree(docRxResult.getResponse().getContentAsString()).get("id").asText());
+
+        // 6. Verify patient CANNOT update or delete doctor-verified prescription
+        mockMvc.perform(put("/api/v1/patient/vault/prescriptions/" + docPrescId)
+                        .header("Authorization", "Bearer " + patientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(updateReq)))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(delete("/api/v1/patient/vault/prescriptions/" + docPrescId)
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isForbidden());
+
+        // 7. Patient CAN delete their own patient-declared prescription
+        mockMvc.perform(delete("/api/v1/patient/vault/prescriptions/" + patientPrescId)
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isNoContent());
+
+        // Verify only doctor prescription remains
+        mockMvc.perform(get("/api/v1/patient/vault/prescriptions")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id", is(docPrescId.toString())))
+                .andExpect(jsonPath("$[0].source", is("DOCTOR_VERIFIED")));
     }
 
     @Test

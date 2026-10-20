@@ -23,7 +23,10 @@ public class LabResultSchemaMigration implements ApplicationRunner {
 
     private static final List<String> STATEMENTS = List.of(
             "ALTER TABLE lab_test_results ALTER COLUMN numeric_value DROP NOT NULL",
-            "ALTER TABLE lab_test_results ALTER COLUMN doctor_id DROP NOT NULL"
+            "ALTER TABLE lab_test_results ALTER COLUMN doctor_id DROP NOT NULL",
+            "ALTER TABLE prescriptions ALTER COLUMN doctor_id DROP NOT NULL",
+            "ALTER TABLE prescriptions ALTER COLUMN dosage DROP NOT NULL",
+            "ALTER TABLE prescriptions ALTER COLUMN expires_at DROP NOT NULL"
     );
 
     private final JdbcTemplate jdbcTemplate;

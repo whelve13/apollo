@@ -11,6 +11,7 @@ import com.apollo.dto.vision.VisionPrescriptionResponse;
 import com.apollo.dto.vault.AccessGrantResponse;
 import com.apollo.dto.vault.CreateHealthConditionRequest;
 import com.apollo.dto.vault.HealthConditionResponse;
+import com.apollo.dto.vault.PatientPrescriptionRequest;
 import com.apollo.dto.vault.PatientVaultTimelineResponse;
 import com.apollo.dto.vault.SyncBaselineConditionsRequest;
 import com.apollo.exception.ErrorResponse;
@@ -179,6 +180,63 @@ public class PatientVaultController {
             @RequestParam(required = false) PrescriptionStatus status) {
         List<PrescriptionResponse> response = prescriptionService.getPatientPrescriptions(userDetails.getProfileId(), status);
         return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary = "Add patient-declared prescription", description = "Records a prescription declared directly by the patient.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Prescription recorded successfully",
+                    content = @Content(schema = @Schema(implementation = PrescriptionResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid request payload",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires ROLE_PATIENT",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @PostMapping("/prescriptions")
+    public ResponseEntity<PrescriptionResponse> addPrescription(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody PatientPrescriptionRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(prescriptionService.addPatientPrescription(userDetails.getProfileId(), request));
+    }
+
+    @Operation(summary = "Update patient-declared prescription", description = "Updates details of a patient-declared prescription. Doctor-verified prescriptions cannot be updated via this endpoint.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Prescription updated successfully",
+                    content = @Content(schema = @Schema(implementation = PrescriptionResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid request payload",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Cannot update doctor-verified prescriptions or unauthorized patient",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Prescription not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @PutMapping("/prescriptions/{prescriptionId}")
+    public ResponseEntity<PrescriptionResponse> updatePrescription(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable UUID prescriptionId,
+            @Valid @RequestBody PatientPrescriptionRequest request) {
+        return ResponseEntity.ok(prescriptionService.updatePatientPrescription(userDetails.getProfileId(), prescriptionId, request));
+    }
+
+    @Operation(summary = "Delete patient-declared prescription", description = "Removes a patient-declared prescription from the vault. Doctor-verified prescriptions cannot be deleted by the patient.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Prescription successfully removed"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Cannot delete doctor-verified prescriptions",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Prescription not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @DeleteMapping("/prescriptions/{prescriptionId}")
+    public ResponseEntity<Void> deletePrescription(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable UUID prescriptionId) {
+        prescriptionService.deletePatientPrescription(userDetails.getProfileId(), prescriptionId);
+        return ResponseEntity.noContent().build();
     }
 
     @Operation(summary = "List patient glasses (vision) prescriptions",

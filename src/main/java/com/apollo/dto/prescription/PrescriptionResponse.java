@@ -1,6 +1,7 @@
 package com.apollo.dto.prescription;
 
 import com.apollo.domain.enums.PrescriptionStatus;
+import com.apollo.domain.enums.SourceType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -38,11 +39,17 @@ public class PrescriptionResponse {
     @Schema(description = "Prescribed dosage instructions", example = "1 capsule 3 times daily")
     private String dosage;
 
+    @Schema(description = "Prescribed frequency instructions", example = "Once daily with breakfast")
+    private String frequency;
+
     @Schema(description = "Dispensing instructions and patient directions", example = "Take with food for 7 days. Complete full course.")
     private String instructions;
 
     @Schema(description = "Current prescription lifecycle status", example = "ACTIVE")
     private PrescriptionStatus status;
+
+    @Schema(description = "Source of the prescription record (DOCTOR_VERIFIED or PATIENT_DECLARED)")
+    private SourceType source;
 
     @Schema(description = "Timestamp when the prescription was issued")
     private Instant issuedAt;
