@@ -90,6 +90,8 @@ public class SecurityConfig {
         patterns.add("http://127.0.0.1:*");
         patterns.add("https://localhost:*");
         patterns.add("https://*.vercel.app");
+        patterns.add("https://*.expo.app");
+        patterns.add("http://*.expo.app");
         patterns.add("https://*.exp.direct");
         patterns.add("http://*.exp.direct");
         patterns.add("https://*.ngrok-free.app");
