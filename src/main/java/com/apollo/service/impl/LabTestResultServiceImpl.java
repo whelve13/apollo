@@ -140,11 +140,11 @@ public class LabTestResultServiceImpl implements LabTestResultService {
         PatientProfile patient = patientProfileRepository.findById(patientId)
                 .orElseThrow(() -> new ResourceNotFoundException("Patient profile not found: " + patientId));
 
-        // Active 24-hour consultation session validation
+        // Active PIN-backed consultation session validation
         boolean hasActiveSession = activeVaultSessionRepository
                 .existsByDoctorIdAndPatientIdAndExpiresAtAfter(doctor.getId(), patient.getId(), Instant.now());
         if (!hasActiveSession) {
-            throw new AccessDeniedException("Doctor does not have an active 24-hour consultation session for this patient. Please unlock the vault with a valid patient access PIN.");
+            throw new AccessDeniedException("Doctor does not have an active PIN-backed consultation session for this patient. Please unlock the vault with a valid patient access PIN.");
         }
         return patient;
     }

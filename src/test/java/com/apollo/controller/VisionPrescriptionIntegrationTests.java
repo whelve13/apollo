@@ -31,6 +31,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.time.LocalDate;
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -588,10 +589,20 @@ class VisionPrescriptionIntegrationTests {
         unlock(patientToken, doctorToken);
         unlock(otherPatientToken, doctorToken);
 
-        issue(doctorToken, withRightEye(patient.getId(), "{\"sphere\":-1}")).andExpect(status().isCreated());
-        issue(doctorToken, withRightEye(otherPatient.getId(), "{\"sphere\":7}")).andExpect(status().isCreated());
-        issue(doctorToken, withRightEye(patient.getId(), "{\"sphere\":-2}")).andExpect(status().isCreated());
-        issue(doctorToken, withRightEye(patient.getId(), "{\"sphere\":-3}")).andExpect(status().isCreated());
+        // Explicit timestamps test ordering without depending on the host clock's resolution.
+        Instant firstIssuedAt = Instant.now().minusSeconds(60);
+        int sequence = 0;
+        for (var entry : java.util.List.of(
+                java.util.Map.entry(patient.getId(), -1), java.util.Map.entry(otherPatient.getId(), 7),
+                java.util.Map.entry(patient.getId(), -2), java.util.Map.entry(patient.getId(), -3))) {
+            MvcResult issued = issue(doctorToken, withRightEye(entry.getKey(), "{\"sphere\":" + entry.getValue() + "}"))
+                    .andExpect(status().isCreated()).andReturn();
+            UUID prescriptionId = UUID.fromString(objectMapper.readTree(issued.getResponse().getContentAsString())
+                    .get("id").asText());
+            var prescription = visionPrescriptionRepository.findById(prescriptionId).orElseThrow();
+            prescription.setIssuedAt(firstIssuedAt.plusSeconds(sequence++));
+            visionPrescriptionRepository.save(prescription);
+        }
 
         listAsPatient(patientToken)
                 .andExpect(status().isOk())
@@ -630,7 +641,13 @@ class VisionPrescriptionIntegrationTests {
         assertThat(before.get("visionPrescriptions").isArray()).isTrue();
         assertThat(before.get("visionPrescriptions")).isEmpty();
 
-        issue(gpToken, withRightEye(patient.getId(), "{\"sphere\":-1}")).andExpect(status().isCreated());
+        MvcResult olderResult = issue(gpToken, withRightEye(patient.getId(), "{\"sphere\":-1}"))
+                .andExpect(status().isCreated()).andReturn();
+        UUID olderId = UUID.fromString(objectMapper.readTree(olderResult.getResponse().getContentAsString())
+                .get("id").asText());
+        var olderPrescription = visionPrescriptionRepository.findById(olderId).orElseThrow();
+        olderPrescription.setIssuedAt(Instant.now().minusSeconds(60));
+        visionPrescriptionRepository.save(olderPrescription);
         issue(gpToken, astigmatismExample(patient.getId())).andExpect(status().isCreated());
 
         JsonNode gpView = unlock(patientToken, gpToken);

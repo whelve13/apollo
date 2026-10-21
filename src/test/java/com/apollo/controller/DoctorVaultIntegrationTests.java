@@ -44,6 +44,8 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -51,6 +53,200 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class DoctorVaultIntegrationTests {
+
+    private com.fasterxml.jackson.databind.JsonNode generatePin(String patientToken) throws Exception {
+        return objectMapper.readTree(mockMvc.perform(post("/api/v1/patient/vault/access-grants")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+    }
+
+    private com.fasterxml.jackson.databind.JsonNode connect(String doctorToken, String pin) throws Exception {
+        return objectMapper.readTree(mockMvc.perform(post("/api/v1/doctor/vault/unlock")
+                        .header("Authorization", "Bearer " + doctorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(UnlockVaultRequest.builder().accessCode(pin).build())))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    }
+
+    private void assertWritesDenied(String doctorToken, UUID patientId) throws Exception {
+        var payloads = java.util.Map.of(
+                "/api/v1/doctor/encounters", java.util.Map.of("patientId", patientId, "diagnosis", "Test",
+                        "clinicalNotes", "Notes", "encounterDate", LocalDate.now()),
+                "/api/v1/doctor/prescriptions", java.util.Map.of("patientId", patientId, "medicationName", "Test",
+                        "dosage", "1 daily", "instructions", "With food", "expiresAt", Instant.now().plusSeconds(3600)),
+                "/api/v1/doctor/test-results", java.util.Map.of("patientId", patientId, "testName", "Glucose",
+                        "numericValue", 90, "unit", "mg/dL", "recordedAt", Instant.now().minusSeconds(5)),
+                "/api/v1/doctor/vision-prescriptions", java.util.Map.of("patientId", patientId,
+                        "rightEye", java.util.Map.of("sphere", -1), "leftEye", java.util.Map.of("sphere", -1)));
+        for (var entry : payloads.entrySet()) {
+            mockMvc.perform(post(entry.getKey()).header("Authorization", "Bearer " + doctorToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(entry.getValue())))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    @Test
+    void connectionsSurviveNewRequestsAndRemainScopedToTheirDoctor() throws Exception {
+        String firstPatient = registerAndGetToken("first@apollo.local", "PATIENT");
+        String secondPatient = registerAndGetToken("second@apollo.local", "PATIENT");
+        String doctor = registerAndGetToken("owner@apollo.local", "DOCTOR");
+        String otherDoctor = registerAndGetToken("other@apollo.local", "DOCTOR");
+        var firstPin = generatePin(firstPatient);
+        var firstVault = connect(doctor, firstPin.get("accessCode").asText());
+        var secondVault = connect(doctor, generatePin(secondPatient).get("accessCode").asText());
+        assertThat(Instant.parse(firstVault.get("sessionExpiresAt").asText()))
+                .isEqualTo(Instant.parse(firstPin.get("expiresAt").asText()));
+
+        mockMvc.perform(get("/api/v1/doctor/vault/sessions").header("Authorization", "Bearer " + doctor))
+                .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[*].accessCode").isEmpty());
+        for (var vault : List.of(firstVault, secondVault)) {
+            String patientId = vault.get("patient").get("id").asText();
+            mockMvc.perform(get("/api/v1/doctor/vault/patients/" + patientId)
+                            .header("Authorization", "Bearer " + doctor))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.patient.id", is(patientId)));
+            mockMvc.perform(get("/api/v1/doctor/vault/patients/" + patientId)
+                            .header("Authorization", "Bearer " + otherDoctor))
+                    .andExpect(status().isForbidden());
+        }
+        mockMvc.perform(get("/api/v1/doctor/vault/sessions").header("Authorization", "Bearer " + otherDoctor))
+                .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
+        mockMvc.perform(get("/api/v1/doctor/vault/sessions").header("Authorization", "Bearer " + firstPatient))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/doctor/vault/sessions")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void replacingPinRevokesConsumedPinConnectionAndOnlyThatPatient() throws Exception {
+        String first = registerAndGetToken("replace@apollo.local", "PATIENT");
+        String second = registerAndGetToken("unchanged@apollo.local", "PATIENT");
+        String doctor = registerAndGetToken("replace.doctor@apollo.local", "DOCTOR");
+        var firstVault = connect(doctor, generatePin(first).get("accessCode").asText());
+        var secondVault = connect(doctor, generatePin(second).get("accessCode").asText());
+        var newPin = generatePin(first);
+        UUID patientId = UUID.fromString(firstVault.get("patient").get("id").asText());
+        mockMvc.perform(get("/api/v1/doctor/vault/sessions").header("Authorization", "Bearer " + doctor))
+                .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].patient.id", is(secondVault.get("patient").get("id").asText())));
+        mockMvc.perform(get("/api/v1/doctor/vault/patients/" + patientId)
+                        .header("Authorization", "Bearer " + doctor)).andExpect(status().isForbidden());
+        assertWritesDenied(doctor, patientId);
+        connect(doctor, newPin.get("accessCode").asText());
+        mockMvc.perform(get("/api/v1/doctor/vault/sessions").header("Authorization", "Bearer " + doctor))
+                .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(2)));
+    }
+
+    @Test
+    void explicitRevocationBlocksReadsAndWritesEvenAfterPinWasConsumed() throws Exception {
+        String patient = registerAndGetToken("revoke@apollo.local", "PATIENT");
+        String doctor = registerAndGetToken("revoke.doctor@apollo.local", "DOCTOR");
+        var vault = connect(doctor, generatePin(patient).get("accessCode").asText());
+        mockMvc.perform(delete("/api/v1/patient/vault/access-grants").header("Authorization", "Bearer " + doctor))
+                .andExpect(status().isForbidden());
+        for (int attempt = 0; attempt < 2; attempt++) {
+            mockMvc.perform(delete("/api/v1/patient/vault/access-grants").header("Authorization", "Bearer " + patient))
+                    .andExpect(status().isNoContent());
+        }
+        mockMvc.perform(get("/api/v1/doctor/vault/sessions").header("Authorization", "Bearer " + doctor))
+                .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
+        assertWritesDenied(doctor, UUID.fromString(vault.get("patient").get("id").asText()));
+    }
+
+    @Test
+    void expiredPinBlocksConnectionEvenIfSessionExpiryIsStillInFuture() throws Exception {
+        String patient = registerAndGetToken("expiry@apollo.local", "PATIENT");
+        String doctor = registerAndGetToken("expiry.doctor@apollo.local", "DOCTOR");
+        var pin = generatePin(patient);
+        var vault = connect(doctor, pin.get("accessCode").asText());
+        AccessGrant grant = accessGrantRepository.findById(UUID.fromString(pin.get("id").asText())).orElseThrow();
+        grant.setExpiresAt(Instant.now().minusSeconds(1));
+        accessGrantRepository.save(grant);
+        mockMvc.perform(get("/api/v1/doctor/vault/sessions").header("Authorization", "Bearer " + doctor))
+                .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
+        UUID patientId = UUID.fromString(vault.get("patient").get("id").asText());
+        mockMvc.perform(get("/api/v1/doctor/vault/patients/" + patientId)
+                        .header("Authorization", "Bearer " + doctor)).andExpect(status().isForbidden());
+        assertWritesDenied(doctor, patientId);
+    }
+
+    @Test
+    void disconnectingOnePatientDoesNotRemoveAnotherConnection() throws Exception {
+        String first = registerAndGetToken("disconnect.first@apollo.local", "PATIENT");
+        String second = registerAndGetToken("disconnect.second@apollo.local", "PATIENT");
+        String doctor = registerAndGetToken("disconnect.doctor@apollo.local", "DOCTOR");
+        String other = registerAndGetToken("disconnect.other@apollo.local", "DOCTOR");
+        var firstVault = connect(doctor, generatePin(first).get("accessCode").asText());
+        var secondVault = connect(doctor, generatePin(second).get("accessCode").asText());
+        String patientId = firstVault.get("patient").get("id").asText();
+        // Another doctor cannot disconnect the owner's connection.
+        mockMvc.perform(delete("/api/v1/doctor/vault/patients/" + patientId)
+                        .header("Authorization", "Bearer " + other)).andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/v1/doctor/vault/sessions").header("Authorization", "Bearer " + doctor))
+                .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(2)));
+        mockMvc.perform(delete("/api/v1/doctor/vault/patients/" + patientId)
+                        .header("Authorization", "Bearer " + doctor)).andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/v1/doctor/vault/sessions").header("Authorization", "Bearer " + doctor))
+                .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].patient.id", is(secondVault.get("patient").get("id").asText())));
+    }
+
+    @Test
+    void legacySessionsWithoutAPinCannotBeRestoredOrAuthorizeWrites() throws Exception {
+        registerAndGetToken("legacy.patient@apollo.local", "PATIENT");
+        String doctorToken = registerAndGetToken("legacy.doctor@apollo.local", "DOCTOR");
+        var patient = patientProfileRepository.findByUserId(userRepository.findByEmail("legacy.patient@apollo.local")
+                .orElseThrow().getId()).orElseThrow();
+        var doctor = doctorProfileRepository.findByUserId(userRepository.findByEmail("legacy.doctor@apollo.local")
+                .orElseThrow().getId()).orElseThrow();
+        activeVaultSessionRepository.save(com.apollo.domain.entity.ActiveVaultSession.builder()
+                .doctor(doctor).patient(patient).expiresAt(Instant.now().plusSeconds(86_400)).build());
+        mockMvc.perform(get("/api/v1/doctor/vault/sessions").header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
+        assertWritesDenied(doctorToken, patient.getId());
+    }
+
+    @Test
+    void collidingActivePinsAreRejectedWithoutConnectingTheWrongPatient() throws Exception {
+        String first = registerAndGetToken("collision.first@apollo.local", "PATIENT");
+        String second = registerAndGetToken("collision.second@apollo.local", "PATIENT");
+        String doctor = registerAndGetToken("collision.doctor@apollo.local", "DOCTOR");
+        var firstPin = generatePin(first);
+        var secondPin = generatePin(second);
+        AccessGrant grant = accessGrantRepository.findById(UUID.fromString(secondPin.get("id").asText())).orElseThrow();
+        grant.setAccessCode(firstPin.get("accessCode").asText());
+        accessGrantRepository.save(grant);
+        mockMvc.perform(post("/api/v1/doctor/vault/unlock").header("Authorization", "Bearer " + doctor)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(UnlockVaultRequest.builder()
+                                .accessCode(firstPin.get("accessCode").asText()).build())))
+                .andExpect(status().isBadRequest());
+        assertThat(activeVaultSessionRepository.count()).isZero();
+    }
+
+    @Test
+    void concurrentUnlocksConsumeAPinOnlyOnce() throws Exception {
+        String patient = registerAndGetToken("race.patient@apollo.local", "PATIENT");
+        String firstDoctor = registerAndGetToken("race.first@apollo.local", "DOCTOR");
+        String secondDoctor = registerAndGetToken("race.second@apollo.local", "DOCTOR");
+        String body = objectMapper.writeValueAsString(UnlockVaultRequest.builder()
+                .accessCode(generatePin(patient).get("accessCode").asText()).build());
+        var start = new java.util.concurrent.CyclicBarrier(2);
+        try (var executor = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            List<java.util.concurrent.Callable<Integer>> attempts = List.of(firstDoctor, secondDoctor).stream()
+                    .<java.util.concurrent.Callable<Integer>>map(doctor -> () -> {
+                        start.await(5, java.util.concurrent.TimeUnit.SECONDS);
+                        return mockMvc.perform(post("/api/v1/doctor/vault/unlock")
+                                        .header("Authorization", "Bearer " + doctor)
+                                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                                .andReturn().getResponse().getStatus();
+                    }).toList();
+            var results = executor.invokeAll(attempts, 10, java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(List.of(results.get(0).get(), results.get(1).get()))
+                    .containsExactlyInAnyOrder(200, 400);
+        }
+        assertThat(activeVaultSessionRepository.count()).isEqualTo(1);
+    }
 
     @Autowired
     private MockMvc mockMvc;
@@ -267,7 +463,7 @@ class DoctorVaultIntegrationTests {
         User patientUser = userRepository.findByEmail("patient.enc@apollo.local").orElseThrow();
         PatientProfile patient = patientProfileRepository.findByUserId(patientUser.getId()).orElseThrow();
 
-        // Patient generates access PIN and doctor unlocks vault to establish 24h session
+        // Patient generates access PIN and doctor unlocks vault to establish PIN-backed session
         MvcResult grantResult = mockMvc.perform(post("/api/v1/patient/vault/access-grants")
                         .header("Authorization", "Bearer " + patientToken))
                 .andExpect(status().isCreated())

@@ -19,6 +19,7 @@ import java.util.UUID;
 public class AdminServiceImpl implements AdminService {
 
     private final DoctorProfileRepository doctorProfileRepository;
+    private final com.apollo.repository.ActiveVaultSessionRepository activeVaultSessionRepository;
 
     @Override
     @Transactional
@@ -27,6 +28,8 @@ public class AdminServiceImpl implements AdminService {
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor profile not found: " + doctorId));
 
         doctor.setDoctorRole(request.getDoctorRole());
+        // A role change requires renewed patient consent instead of restoring old connections.
+        activeVaultSessionRepository.deleteByDoctorId(doctorId);
         DoctorProfile saved = doctorProfileRepository.save(doctor);
         log.info("Doctor permission role updated: doctorId={}, newRole={}", saved.getId(), saved.getDoctorRole());
 

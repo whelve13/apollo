@@ -35,10 +35,10 @@ public class UnlockedVaultResponse {
     @Schema(description = "Chronological past consultation encounter history")
     private List<ClinicalEncounterSummaryDto> encounterHistory;
 
-    @Schema(description = "Scoped 24-hour active vault session UUID", example = "f4eebc99-9c0b-4ef8-bb6d-6bb9bd380a77")
+    @Schema(description = "Scoped PIN-backed active vault session UUID", example = "f4eebc99-9c0b-4ef8-bb6d-6bb9bd380a77")
     private java.util.UUID activeSessionId;
 
-    @Schema(description = "Timestamp when the 24-hour consultation session expires")
+    @Schema(description = "Timestamp when the PIN-backed consultation session expires")
     private java.time.Instant sessionExpiresAt;
 
     @Schema(description = "Active and past prescriptions (accessible to clinicians and pharmacists)")

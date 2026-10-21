@@ -32,6 +32,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -48,6 +51,32 @@ public class DoctorVaultController {
     private final PrescriptionService prescriptionService;
     private final LabTestResultService labTestResultService;
     private final VisionPrescriptionService visionPrescriptionService;
+
+    @Operation(summary = "Disconnect this doctor's patient vault", description = "Does not affect other doctors or patients.")
+    @DeleteMapping("/vault/patients/{patientId}")
+    public ResponseEntity<Void> disconnectVault(@AuthenticationPrincipal CustomUserDetails userDetails,
+                                               @PathVariable java.util.UUID patientId) {
+        doctorVaultService.disconnectVault(userDetails.getProfileId(), patientId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Restore all patient vaults connected to the authenticated doctor",
+            description = "Returns fresh role-filtered vaults whose original PIN has not expired or been revoked. PINs are never returned.")
+    @GetMapping("/vault/sessions")
+    public ResponseEntity<java.util.List<UnlockedVaultResponse>> getActiveVaults(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore())
+                .body(doctorVaultService.getActiveVaults(userDetails.getProfileId()));
+    }
+
+    @Operation(summary = "Refresh a connected patient vault", description = "Requires this doctor's unexpired, unrevoked PIN connection.")
+    @GetMapping("/vault/patients/{patientId}")
+    public ResponseEntity<UnlockedVaultResponse> getActiveVault(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable java.util.UUID patientId) {
+        return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore())
+                .body(doctorVaultService.getActiveVault(userDetails.getProfileId(), patientId));
+    }
 
     @Operation(summary = "Unlock patient vault via 6-digit access PIN",
             description = "Validates and consumes a single-use 6-digit consultation access PIN. Unlocks patient demographics, baseline health records, and past consultation history for clinical review.")
@@ -66,7 +95,7 @@ public class DoctorVaultController {
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @Valid @RequestBody UnlockVaultRequest request) {
         UnlockedVaultResponse response = doctorVaultService.unlockVault(userDetails.getProfileId(), request);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore()).body(response);
     }
 
     @Operation(summary = "Log an append-only clinical consultation encounter",
@@ -114,7 +143,7 @@ public class DoctorVaultController {
     }
 
     @Operation(summary = "Issue a glasses (vision) prescription",
-            description = "Issues a glasses prescription with per-eye sphere, cylinder, axis and add, plus optional pupillary distance, notes and validity date. Permitted for General Practitioners and Specialists with an active 24-hour vault session for the patient. doctorId, doctorName and issuedAt are always set by the server.")
+            description = "Issues a glasses prescription with per-eye sphere, cylinder, axis and add, plus optional pupillary distance, notes and validity date. Permitted for General Practitioners and Specialists with an active PIN-backed vault session for the patient. doctorId, doctorName and issuedAt are always set by the server.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Glasses prescription issued successfully",
                     content = @Content(schema = @Schema(implementation = VisionPrescriptionResponse.class))),
@@ -122,7 +151,7 @@ public class DoctorVaultController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "Forbidden - Requires active 24h session and a general practitioner or specialist role",
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires active PIN-backed session and a general practitioner or specialist role",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "Patient, doctor, or encounter not found",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -136,7 +165,7 @@ public class DoctorVaultController {
     }
 
     @Operation(summary = "Record a lab test result or biomarker measurement",
-            description = "Appends a single diagnostic test result for the patient: a numeric value, a censored value (qualifier + bound), or a text result, with optional reference range, flag, comment and DRAFT/FINAL status. Permitted for General Practitioners, Specialists, and Lab Technicians with an active 24-hour vault session.")
+            description = "Appends a single diagnostic test result for the patient: a numeric value, a censored value (qualifier + bound), or a text result, with optional reference range, flag, comment and DRAFT/FINAL status. Permitted for General Practitioners, Specialists, and Lab Technicians with an active PIN-backed vault session.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Lab test result recorded successfully",
                     content = @Content(schema = @Schema(implementation = LabTestResultResponse.class))),
@@ -144,7 +173,7 @@ public class DoctorVaultController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "Forbidden - Requires active 24h session and authorized doctor role",
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires active PIN-backed session and authorized doctor role",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "Patient or doctor not found",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -158,7 +187,7 @@ public class DoctorVaultController {
     }
 
     @Operation(summary = "Record a lab test panel in one request",
-            description = "Atomically saves every entry of a lab panel (all entries are stored, or none) under a server-generated panelId, together with the template code, template version and per-entry key. Same role and 24-hour session rules as a single result.")
+            description = "Atomically saves every entry of a lab panel (all entries are stored, or none) under a server-generated panelId, together with the template code, template version and per-entry key. Same role and PIN-backed session rules as a single result.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Lab test panel recorded successfully",
                     content = @Content(schema = @Schema(implementation = LabTestPanelResponse.class))),
@@ -166,7 +195,7 @@ public class DoctorVaultController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "403", description = "Forbidden - Requires active 24h session and authorized doctor role",
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires active PIN-backed session and authorized doctor role",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "Patient or doctor not found",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))

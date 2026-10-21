@@ -177,7 +177,7 @@ class Phase5IntegrationTests {
     }
 
     @Test
-    @DisplayName("24-Hour Session Enforcement: Doctor cannot append encounter without active session, succeeds after unlock, fails if expired")
+    @DisplayName("PIN-Backed Session Enforcement: Doctor cannot append encounter without active session, succeeds after unlock, fails if expired")
     void testActive24HourSessionLifecycle() throws Exception {
         String patientToken = registerPatientAndGetToken("patient.session@apollo.local");
         String doctorToken = registerDoctorAndGetToken("doctor.gp.session@apollo.local", DoctorRole.GENERAL_PRACTITIONER);
@@ -199,9 +199,9 @@ class Phase5IntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(encRequest)))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.message", is("Doctor does not have an active 24-hour consultation session for this patient. Please unlock the vault with a valid patient access PIN.")));
+                .andExpect(jsonPath("$.message", is("Doctor does not have an active PIN-backed consultation session for this patient. Please unlock the vault with a valid patient access PIN.")));
 
-        // 2. Unlock vault via 6-digit PIN establishes active 24h session
+        // 2. Unlock vault via 6-digit PIN establishes active PIN-backed session
         unlockVaultSession(patientToken, doctorToken);
 
         boolean hasActiveSession = activeVaultSessionRepository.existsByDoctorIdAndPatientIdAndExpiresAtAfter(
@@ -230,7 +230,7 @@ class Phase5IntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(encRequest)))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.message", is("Doctor does not have an active 24-hour consultation session for this patient. Please unlock the vault with a valid patient access PIN.")));
+                .andExpect(jsonPath("$.message", is("Doctor does not have an active PIN-backed consultation session for this patient. Please unlock the vault with a valid patient access PIN.")));
     }
 
     @Test
@@ -523,7 +523,15 @@ class Phase5IntegrationTests {
                 .andExpect(jsonPath("$.doctorId", is(doctor.getId().toString())))
                 .andExpect(jsonPath("$.doctorRole", is("GENERAL_PRACTITIONER")));
 
-        // 3. Immediately retry encounter creation: now succeeds
+        // 3. Role changes drop existing connections; renewed patient consent is required.
+        mockMvc.perform(post("/api/v1/doctor/encounters")
+                        .header("Authorization", "Bearer " + doctorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(encReq)))
+                .andExpect(status().isForbidden());
+        unlockVaultSession(patientToken, doctorToken);
+
+        // 4. The new role can create encounters after unlocking again.
         mockMvc.perform(post("/api/v1/doctor/encounters")
                         .header("Authorization", "Bearer " + doctorToken)
                         .contentType(MediaType.APPLICATION_JSON)

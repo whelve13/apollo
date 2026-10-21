@@ -20,6 +20,8 @@ public interface PatientVaultService {
 
     AccessGrantResponse generateAccessGrant(UUID patientProfileId);
 
+    void revokeAccessGrants(UUID patientProfileId);
+
     PatientVaultTimelineResponse getTimeline(UUID patientProfileId);
 
     PatientProfileResponse updateProfile(UUID patientProfileId, UpdatePatientProfileRequest request);

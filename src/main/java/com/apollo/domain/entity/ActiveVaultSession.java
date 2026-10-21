@@ -45,6 +45,11 @@ public class ActiveVaultSession {
     @JoinColumn(name = "doctor_id", nullable = false)
     private DoctorProfile doctor;
 
+    // Nullable for pre-existing sessions; authorization queries exclude sessions without a grant.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "access_grant_id")
+    private AccessGrant accessGrant;
+
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 

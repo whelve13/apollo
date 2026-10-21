@@ -51,6 +51,9 @@ public class AccessGrant {
     @Builder.Default
     private boolean isUsed = false;
 
+    @Column(name = "revoked_at")
+    private Instant revokedAt;
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -60,7 +63,7 @@ public class AccessGrant {
     }
 
     public boolean isValid() {
-        return !isUsed && !isExpired();
+        return !isUsed && revokedAt == null && !isExpired();
     }
 
     @Override

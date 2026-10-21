@@ -40,7 +40,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -67,34 +66,68 @@ public class DoctorVaultServiceImpl implements DoctorVaultService {
         DoctorProfile doctor = doctorProfileRepository.findById(doctorProfileId)
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor profile not found: " + doctorProfileId));
 
-        // Find active, unexpired, and unused grant
-        AccessGrant grant = accessGrantRepository
-                .findByAccessCodeAndIsUsedFalseAndExpiresAtAfter(request.getAccessCode().trim(), Instant.now())
+        // Lock the patient before the grant, matching PIN replacement/revocation lock order.
+        // The initial lookup returns IDs only, so the grant is re-read after acquiring the lock.
+        List<UUID> patientIds = accessGrantRepository
+                .findPatientIdsForUnlock(request.getAccessCode().trim(), Instant.now());
+        if (patientIds.size() != 1) {
+            throw new InvalidAccessGrantException("Invalid or expired consultation access PIN.");
+        }
+        PatientProfile patient = patientProfileRepository.findByIdForAccessGrantUpdate(patientIds.getFirst())
                 .orElseThrow(() -> new InvalidAccessGrantException("Invalid or expired consultation access PIN."));
+
+        List<AccessGrant> candidates = accessGrantRepository
+                .findUnlockCandidates(request.getAccessCode().trim(), Instant.now());
+        // Ambiguous PINs must never choose a patient's vault arbitrarily.
+        if (candidates.size() != 1 || !candidates.getFirst().getPatient().getId().equals(patient.getId())) {
+            throw new InvalidAccessGrantException("Invalid or expired consultation access PIN.");
+        }
+        AccessGrant grant = candidates.getFirst();
 
         // Consume grant immediately upon handshake
         grant.setUsed(true);
         accessGrantRepository.save(grant);
 
-        PatientProfile patient = grant.getPatient();
+        ActiveVaultSession session = activeVaultSessionRepository.save(ActiveVaultSession.builder()
+                .doctor(doctor)
+                .patient(patient)
+                .accessGrant(grant)
+                .expiresAt(grant.getExpiresAt())
+                .build());
 
-        // Establish or extend 24-hour consultation session
-        Instant sessionExpiresAt = Instant.now().plus(24, ChronoUnit.HOURS);
+        return mapUnlockedVault(doctor, session);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UnlockedVaultResponse> getActiveVaults(UUID doctorProfileId) {
+        DoctorProfile doctor = doctorProfileRepository.findById(doctorProfileId)
+                .orElseThrow(() -> new ResourceNotFoundException("Doctor profile not found: " + doctorProfileId));
+        return activeVaultSessionRepository.findByDoctorIdAndExpiresAtAfter(doctorProfileId, Instant.now())
+                .stream().map(session -> mapUnlockedVault(doctor, session)).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public UnlockedVaultResponse getActiveVault(UUID doctorProfileId, UUID patientId) {
+        DoctorProfile doctor = doctorProfileRepository.findById(doctorProfileId)
+                .orElseThrow(() -> new ResourceNotFoundException("Doctor profile not found: " + doctorProfileId));
         ActiveVaultSession session = activeVaultSessionRepository
-                .findTopByDoctorIdAndPatientIdAndExpiresAtAfterOrderByExpiresAtDesc(doctor.getId(), patient.getId(), Instant.now())
-                .orElse(null);
+                .findByDoctorIdAndExpiresAtAfter(doctorProfileId, Instant.now()).stream()
+                .filter(active -> active.getPatient().getId().equals(patientId))
+                .findFirst().orElseThrow(() -> new AccessDeniedException(
+                        "Doctor does not have active PIN access to this patient vault."));
+        return mapUnlockedVault(doctor, session);
+    }
 
-        if (session != null) {
-            session.setExpiresAt(sessionExpiresAt);
-            session = activeVaultSessionRepository.save(session);
-        } else {
-            session = ActiveVaultSession.builder()
-                    .doctor(doctor)
-                    .patient(patient)
-                    .expiresAt(sessionExpiresAt)
-                    .build();
-            session = activeVaultSessionRepository.save(session);
-        }
+    @Override
+    @Transactional
+    public void disconnectVault(UUID doctorProfileId, UUID patientId) {
+        activeVaultSessionRepository.deleteByDoctorIdAndPatientId(doctorProfileId, patientId);
+    }
+
+    private UnlockedVaultResponse mapUnlockedVault(DoctorProfile doctor, ActiveVaultSession session) {
+        PatientProfile patient = session.getPatient();
 
         PatientProfileSummaryDto patientSummary = PatientProfileSummaryDto.builder()
                 .id(patient.getId())
@@ -174,7 +207,8 @@ public class DoctorVaultServiceImpl implements DoctorVaultService {
                 .allConditions(allConditions)
                 .encounterHistory(encounterHistory)
                 .activeSessionId(session.getId())
-                .sessionExpiresAt(session.getExpiresAt())
+                .sessionExpiresAt(session.getExpiresAt().isBefore(session.getAccessGrant().getExpiresAt())
+                        ? session.getExpiresAt() : session.getAccessGrant().getExpiresAt())
                 .prescriptions(prescriptions)
                 .testResults(testResults)
                 .visionPrescriptions(visionPrescriptions)
@@ -195,11 +229,11 @@ public class DoctorVaultServiceImpl implements DoctorVaultService {
         PatientProfile patient = patientProfileRepository.findById(request.getPatientId())
                 .orElseThrow(() -> new ResourceNotFoundException("Patient profile not found: " + request.getPatientId()));
 
-        // Active 24-hour consultation session validation
+        // Active PIN-backed consultation session validation
         boolean hasActiveSession = activeVaultSessionRepository
                 .existsByDoctorIdAndPatientIdAndExpiresAtAfter(doctor.getId(), patient.getId(), Instant.now());
         if (!hasActiveSession) {
-            throw new AccessDeniedException("Doctor does not have an active 24-hour consultation session for this patient. Please unlock the vault with a valid patient access PIN.");
+            throw new AccessDeniedException("Doctor does not have an active PIN-backed consultation session for this patient. Please unlock the vault with a valid patient access PIN.");
         }
 
         ClinicalEncounter encounter = ClinicalEncounter.builder()

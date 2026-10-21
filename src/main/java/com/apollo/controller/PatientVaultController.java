@@ -133,7 +133,7 @@ public class PatientVaultController {
         return ResponseEntity.noContent().build();
     }
 
-    @Operation(summary = "Generate a consultation access grant PIN", description = "Generates a random 6-digit access code valid for 15 minutes to unlock doctor append access. Revokes any older open tokens.")
+    @Operation(summary = "Generate a consultation access grant PIN", description = "Generates a random 6-digit access code valid for 15 minutes. Revokes older PINs and the doctor connections created from them.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Access grant generated successfully",
                     content = @Content(schema = @Schema(implementation = AccessGrantResponse.class))),
@@ -147,6 +147,14 @@ public class PatientVaultController {
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         AccessGrantResponse response = patientVaultService.generateAccessGrant(userDetails.getProfileId());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @Operation(summary = "Invalidate consultation PINs and their connected doctor sessions",
+            description = "Immediately revokes all PIN access to the authenticated patient's vault.")
+    @DeleteMapping("/access-grants")
+    public ResponseEntity<Void> revokeAccessGrants(@AuthenticationPrincipal CustomUserDetails userDetails) {
+        patientVaultService.revokeAccessGrants(userDetails.getProfileId());
+        return ResponseEntity.noContent().build();
     }
 
     @Operation(summary = "Get consolidated chronological patient vault timeline", description = "Retrieves complete chronological view of demographics, baseline conditions, and appended clinical consultations.")

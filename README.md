@@ -15,6 +15,8 @@ Apollo is a secure, shared medical records vault backend engineered to replace t
    - Patients own and initialize their health vault with baseline data (allergies, chronic conditions, past medical history).
    - Baseline records are tagged as `PATIENT_DECLARED`.
    - Patients generate temporary 6-digit access tokens (strictly valid for 15 minutes) to present to clinicians during consultations.
+   - Each accepted PIN creates a persistent connection between that patient and the authenticated doctor. A doctor can keep multiple patient connections at once and restore them after reloading or signing in again.
+   - Connections expire at the original PIN's expiration time. Generating a replacement PIN or explicitly invalidating access revokes existing connections immediately; unlocking never starts a separate 24-hour window.
 2. **Doctor Append-Only Interface**:
    - Clinicians authenticate, validate the patient's temporary access token, and unlock append rights.
    - Encounters (diagnoses, consultation notes, examination details) are **strictly immutable and append-only** once saved.
@@ -22,6 +24,26 @@ Apollo is a secure, shared medical records vault backend engineered to replace t
    - Prescriptions are decoupled from the general encounter timeline for fast pharmacy access.
    - Doctors can issue prescriptions during an encounter or independently.
    - Prescriptions track status (`ACTIVE`, `FULFILLED`, `CANCELLED`), dosage, instructions, issue date, and expiration.
+
+---
+
+## Connected Patient API
+
+All doctor routes below require a doctor JWT; doctor identity comes from that JWT.
+
+| Method | Route | Behavior |
+| :--- | :--- | :--- |
+| POST | `/api/v1/doctor/vault/unlock` | Accepts `{ "accessCode": "123456" }`, consumes the single-use PIN, and saves the doctor/patient/grant connection. |
+| GET | `/api/v1/doctor/vault/sessions` | Restores all currently authorized patient vaults for this doctor, using the same role-filtered response as unlock. PINs are never returned. |
+| GET | `/api/v1/doctor/vault/patients/{patientId}` | Refreshes one connected vault; returns 403 when its connection is absent, expired, or revoked. |
+| DELETE | `/api/v1/doctor/vault/patients/{patientId}` | Disconnects only this doctor's connection to this patient. |
+| DELETE | `/api/v1/patient/vault/access-grants` | Patient JWT required. Invalidates this patient's PINs and every connection created from them. Idempotent. |
+
+The frontend restores connections from the server on login/reload and rechecks every 15 seconds and on browser focus. It retains no PINs or patient records in browser storage. Backend access checks apply immediately to subsequent requests after expiration/revocation, even if a browser still displays an earlier snapshot.
+
+The existing `POST /api/v1/patient/vault/access-grants` also revokes older connections before issuing a new PIN. Role changes disconnect the doctor's existing vaults and require new patient consent.
+
+Deployment adds nullable `access_grant_id` on `active_vault_sessions` and `revoked_at` on `access_grants` through the existing Hibernate schema update configuration. Legacy sessions without an associated grant are intentionally excluded from authorization; those doctors must unlock again.
 
 ---
 

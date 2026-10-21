@@ -10,7 +10,7 @@ public interface VisionPrescriptionService {
 
     /**
      * Issues a glasses prescription. Restricted to general practitioners and specialists holding an active
-     * 24-hour vault session for the patient.
+     * PIN-backed vault session for the patient.
      */
     VisionPrescriptionResponse issueVisionPrescription(UUID doctorProfileId, CreateVisionPrescriptionRequest request);
 

@@ -102,21 +102,18 @@ public class PatientVaultServiceImpl implements PatientVaultService {
     @Override
     @Transactional
     public AccessGrantResponse generateAccessGrant(UUID patientProfileId) {
-        PatientProfile patient = patientProfileRepository.findById(patientProfileId)
+        PatientProfile patient = patientProfileRepository.findByIdForAccessGrantUpdate(patientProfileId)
                 .orElseThrow(() -> new ResourceNotFoundException("Patient profile not found with id: " + patientProfileId));
 
-        // Invalidate any existing open (unused) grants for this patient
-        List<AccessGrant> activeGrants = accessGrantRepository.findByPatientIdAndIsUsedFalse(patientProfileId);
-        if (!activeGrants.isEmpty()) {
-            activeGrants.forEach(grant -> grant.setUsed(true));
-            accessGrantRepository.saveAll(activeGrants);
-        }
+        // Replacing a PIN also revokes connections established with a previously consumed PIN.
+        accessGrantRepository.revokeByPatientId(patientProfileId, Instant.now());
 
         // Generate cryptographically secure 6-digit numeric token
         int codeNumber = secureRandom.nextInt(1_000_000);
         String accessCode = String.format("%06d", codeNumber);
 
-        Instant now = Instant.now();
+        // Match database timestamp precision so the returned expiry equals the persisted expiry.
+        Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         Instant expiresAt = now.plus(validityMinutes, ChronoUnit.MINUTES);
 
         AccessGrant newGrant = AccessGrant.builder()
@@ -137,6 +134,14 @@ public class PatientVaultServiceImpl implements PatientVaultService {
                 .remainingSeconds(remainingSeconds)
                 .isUsed(newGrant.isUsed())
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public void revokeAccessGrants(UUID patientProfileId) {
+        patientProfileRepository.findByIdForAccessGrantUpdate(patientProfileId)
+                .orElseThrow(() -> new ResourceNotFoundException("Patient profile not found with id: " + patientProfileId));
+        accessGrantRepository.revokeByPatientId(patientProfileId, Instant.now());
     }
 
     @Override
